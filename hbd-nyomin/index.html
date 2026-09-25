@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="screen-orientation" content="portrait" />
+    <meta name="x5-orientation" content="portrait" />
+    <meta name="theme-color" content="#b8e0d2" />
+    <title>Nyomin's Birthday Quest 🌸</title>
+    <!-- Cute retro & whimsical Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Quicksand:wght@500;600;700&family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Portrait Orientation Suggestion for Mobile Landscape -->
+      <div id="orientation-warning" class="orientation-warning">
+        <div class="orient-icon">📱</div>
+        <p>Please hold your phone vertically (Portrait Mode) for Nyomin's adventure! ✨</p>
+      </div>
+      <!-- Countdown Overlay Screen -->
+      <div id="countdown-screen" class="screen-overlay">
+        <div class="countdown-card">
+          <div class="cake-badge">🎂</div>
+          <h1 id="countdown-title" title="Tap 3 times to preview">Nyomin's Birthday Quest</h1>
+          <p class="countdown-subtitle">A special magical surprise is preparing...</p>
+          
+          <div class="timer-grid">
+            <div class="timer-box">
+              <span id="days" class="timer-number">00</span>
+              <span class="timer-label">DAYS</span>
+            </div>
+            <div class="timer-box">
+              <span id="hours" class="timer-number">00</span>
+              <span class="timer-label">HOURS</span>
+            </div>
+            <div class="timer-box">
+              <span id="minutes" class="timer-number">00</span>
+              <span class="timer-label">MINS</span>
+            </div>
+            <div class="timer-box">
+              <span id="seconds" class="timer-number">00</span>
+              <span class="timer-label">SECS</span>
+            </div>
+          </div>
+
+          <div class="timezone-note">
+            <span>🕰️ Unlocks on Sept 26, 00:00 (Moscow Time / MSK)</span>
+          </div>
+
+          <div id="countdown-hint" class="hint-text">
+            (Pst! Secret tap title 3x or add ?dev=true to preview)
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Game Container -->
+      <div id="game-container">
+        <!-- Floating Sound Control -->
+        <button id="sound-toggle" class="icon-btn" aria-label="Toggle Sound" title="Sound Mute/Unmute">
+          <span id="sound-icon">🎵</span>
+        </button>
+
+        <!-- Canvas for Game Rendering -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Dialogue Box Overlay -->
+        <div id="dialogue-box" class="dialogue-container hidden">
+          <div class="dialogue-portrait">
+            <canvas id="dialogue-avatar" width="48" height="48"></canvas>
+          </div>
+          <div class="dialogue-content">
+            <div class="dialogue-speaker">Nyomin</div>
+            <div id="dialogue-text" class="dialogue-text"></div>
+          </div>
+          <div class="dialogue-prompt">TAP / [SPACE] ▾</div>
+        </div>
+
+        <!-- Mobile Touch Virtual Controls -->
+        <div id="mobile-controls">
+          <div class="dpad-container">
+            <button class="dpad-btn dpad-up" data-dir="up">▲</button>
+            <div class="dpad-middle-row">
+              <button class="dpad-btn dpad-left" data-dir="left">◀</button>
+              <div class="dpad-center"></div>
+              <button class="dpad-btn dpad-right" data-dir="right">▶</button>
+            </div>
+            <button class="dpad-btn dpad-down" data-dir="down">▼</button>
+          </div>
+
+          <div class="action-container">
+            <button id="action-btn" class="action-btn">
+              <span>ACTION</span>
+              <span class="action-subtext">TALK / OPEN</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Interactive Notification Bubble (e.g. [Press E / Tap Action]) -->
+        <div id="interact-bubble" class="interact-bubble hidden">
+          <span class="bubble-icon">✨</span>
+          <span id="interact-bubble-text">Press Action / [E]</span>
+        </div>
+      </div>
+
+      <!-- Birthday Card Modal (Pop-up after opening the chest) -->
+      <div id="birthday-modal" class="modal-overlay hidden">
+        <canvas id="confetti-canvas"></canvas>
+        <div class="modal-card">
+          <div class="ribbon">🎀 HAPPY BIRTHDAY 🎀</div>
+          
+          <div class="card-avatar-wrapper">
+            <canvas id="modal-avatar" width="80" height="80"></canvas>
+            <div class="sparkle-crown">👑</div>
+          </div>
+
+          <h2 class="card-title">Happy Birthday, Nyomin!</h2>
+          <p class="card-subtitle">To the sweetest, most hardworking soul ✨</p>
+
+          <div class="wishes-box">
+            <div class="wish-item">
+              <span class="wish-emoji">🎓</span>
+              <p><strong>Smooth Sailing to Graduation:</strong> Wishing you all the success in your academic journey! May you conquer every exam with confidence and graduate with flying colors!</p>
+            </div>
+            <div class="wish-item">
+              <span class="wish-emoji">⏰</span>
+              <p><strong>Never Late on Deadlines:</strong> May your assignments always be finished way before the due date, with zero late submissions and stress-free study sessions!</p>
+            </div>
+            <div class="wish-item">
+              <span class="wish-emoji">🚌</span>
+              <p><strong>High Spirits on the Commute:</strong> Sending you boundless energy and good vibes for those 1-hour trips back and forth to campus! May every journey be safe, cozy, and filled with your favorite playlists!</p>
+            </div>
+            <div class="wish-item">
+              <span class="wish-emoji">🌸</span>
+              <p><strong>Endless Joy & Blessings:</strong> Always stay cheerful, healthy, and smiling. May this new year of your life bring you wonderful surprises and pure happiness!</p>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button id="modal-replay-btn" class="cute-btn">Keep Exploring Meadow 🌿</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

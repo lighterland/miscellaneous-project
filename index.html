@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Miscellaneous Projects ✨</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f7f5;
+      --card-bg: #ffffff;
+      --primary: #588157;
+      --accent: #f4a261;
+      --text: #2d3142;
+      --text-muted: #6c757d;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Quicksand', sans-serif;
+      background: linear-gradient(135deg, #e8f5e9 0%, #edf6f9 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 680px;
+      width: 100%;
+      text-align: center;
+    }
+    .header-badge {
+      font-size: 2.8rem;
+      margin-bottom: 12px;
+      animation: float 3s ease-in-out infinite alternate;
+    }
+    @keyframes float {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(-8px); }
+    }
+    h1 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 1.15rem;
+      color: #344e41;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .subtitle {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 36px;
+    }
+    .projects-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .project-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06), 0 0 0 2px #d8e2dc;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    }
+    .project-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.1);
+      border-color: #a3b18a;
+    }
+    .project-info {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .project-icon {
+      font-size: 2.2rem;
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background: #e9f5ec;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .project-title {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.85rem;
+      color: #283618;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .project-desc {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .project-btn {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 10px 18px;
+      border-radius: 12px;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .footer {
+      margin-top: 50px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #8d99ae;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-badge">✨📦✨</div>
+    <h1>Miscellaneous Projects</h1>
+    <p class="subtitle">A playground collection of random interactive web apps & experiments</p>
+
+    <div class="projects-grid">
+      <!-- Project 1: Nyomin's Birthday Quest -->
+      <a href="./hbd-nyomin/" class="project-card">
+        <div class="project-info">
+          <div class="project-icon">🌸</div>
+          <div>
+            <h2 class="project-title">Nyomin's Birthday Quest</h2>
+            <p class="project-desc">Interactive retro 2D pixel-art quest with grid movement & heartwarming surprises!</p>
+          </div>
+        </div>
+        <div class="project-btn">Play ➜</div>
+      </a>
+    </div>
+
+    <div class="footer">
+      Hosted with ❤️ on GitHub Pages
+    </div>
+  </div>
+</body>
+</html>
