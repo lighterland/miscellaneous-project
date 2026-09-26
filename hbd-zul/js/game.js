@@ -42,11 +42,9 @@ class GameController {
         // Modals
         this.dialogModal = document.getElementById('dialog-modal');
         this.dialogTextRu = document.getElementById('dialog-text-ru');
-        this.dialogTextEn = document.getElementById('dialog-text-en');
         this.dialogOptions = document.getElementById('dialog-options');
         this.dialogFeedback = document.getElementById('dialog-feedback');
         this.feedbackTextRu = document.getElementById('feedback-text-ru');
-        this.feedbackTextEn = document.getElementById('feedback-text-en');
         this.btnFeedbackContinue = document.getElementById('btn-feedback-continue');
         this.speakerAvatar = document.getElementById('speaker-avatar');
 
@@ -260,7 +258,6 @@ class GameController {
         this.dialogOptions.innerHTML = '';
 
         this.dialogTextRu.textContent = dialogueObj.textRu;
-        this.dialogTextEn.textContent = dialogueObj.textEn;
 
         // Avatar expression
         if (dialogueObj.mood === 'furious') this.speakerAvatar.textContent = '😠';
@@ -274,7 +271,6 @@ class GameController {
                 btn.className = 'option-btn';
                 btn.innerHTML = `
                     <span class="option-text-ru">${opt.textRu}</span>
-                    <span class="option-text-en">${opt.textEn}</span>
                 `;
                 btn.addEventListener('click', () => this.handleOptionSelected(opt));
                 this.dialogOptions.appendChild(btn);
@@ -300,7 +296,6 @@ class GameController {
 
         this.speakerAvatar.textContent = '😋';
         this.dialogTextRu.textContent = `Подношение принято: ${itemData.nameRu}`;
-        this.dialogTextEn.textContent = itemData.descEn;
 
         const reactionBox = document.createElement('div');
         reactionBox.className = 'dialog-feedback-box active';
@@ -308,7 +303,6 @@ class GameController {
         reactionBox.style.borderColor = '#a5d8ff';
         reactionBox.innerHTML = `
             <p class="feedback-text-ru" style="color: #1971c2;">${itemData.reactionRu}</p>
-            <p class="feedback-text-en" style="color: #4dabf7;">${itemData.reactionEn}</p>
         `;
         this.dialogOptions.appendChild(reactionBox);
 
@@ -353,7 +347,6 @@ class GameController {
         this.updateRageHUD();
 
         this.feedbackTextRu.textContent = option.responseRu;
-        this.feedbackTextEn.textContent = option.responseEn;
         this.dialogFeedback.classList.add('active');
     }
 
