@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Операция: Прости, Зуля! | Belated HBD</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Confetti Fullscreen Canvas -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Flying Slipper / Boot Projectile -->
+    <div id="projectile" class="projectile-flying">🩴</div>
+
+    <!-- Top HUD -->
+    <header class="top-hud">
+        <div class="hud-title-wrap">
+            <span class="hud-title">Операция: Прости, Зуля!</span>
+            <span class="hud-days-late">⌛ +92 Дня с 26 июня</span>
+        </div>
+        <div class="hud-controls">
+            <button id="btn-audio" class="icon-btn" title="Включить / Выключить звук" aria-label="Toggle Sound">🔊</button>
+            <button id="btn-info" class="icon-btn" title="Справка" aria-label="Info">❓</button>
+        </div>
+    </header>
+
+    <!-- Zulya's Rage Meter -->
+    <div class="rage-meter-container">
+        <div class="rage-label-row">
+            <span>Шкала гнева Зули:</span>
+            <span id="rage-percent" class="rage-status-text">99% (В ярости! 💥)</span>
+        </div>
+        <div class="rage-bar-track">
+            <div id="rage-bar-fill" class="rage-bar-fill"></div>
+        </div>
+    </div>
+
+    <!-- Main Steppe Viewport -->
+    <main class="game-viewport" id="viewport">
+        <!-- Clouds -->
+        <div class="clouds-layer">
+            <div class="cloud cloud-1"></div>
+            <div class="cloud cloud-2"></div>
+        </div>
+
+        <!-- Landscape -->
+        <div class="steppe-landscape">
+            <div class="distant-mountains"></div>
+            <div class="steppe-hill-back"></div>
+            <div class="steppe-hill-front"></div>
+            <div class="distant-horse" id="horse-easter-egg" title="Степной конь">🐎</div>
+        </div>
+
+        <!-- Traditional Mongolian Yurt (Ger) -->
+        <div class="yurt-wrapper" id="yurt-container">
+            <!-- Roof / Dome -->
+            <div class="yurt-dome">
+                <!-- Roof Crown / Toono -->
+                <div class="toono-crown" id="toono">
+                    <div class="chimney-pipe"></div>
+                    <div class="smoke-cloud">💨</div>
+                    <div class="toono-opening"></div>
+                </div>
+
+                <!-- Peeking Zulya face -->
+                <div id="zulya-peeker" class="zulya-peeker">😠</div>
+
+                <!-- Traditional Stripes -->
+                <div class="roof-stripes"></div>
+            </div>
+
+            <!-- Wall / Base -->
+            <div class="yurt-wall">
+                <!-- Blue Mongolian Ornament Band -->
+                <div class="mongolian-ornament-band">
+                    <span class="ornament-pattern">◆ ❖ ◈ ❖ ◆ ❖ ◈ ❖ ◆ ❖ ◈</span>
+                </div>
+
+                <!-- Door Frame -->
+                <div class="yurt-door-frame" id="yurt-door" title="Постучать в дверь юрты">
+                    <div class="yurt-inside" id="yurt-inside">
+                        <span class="zulya-inside-face" id="zulya-inside-face">😒</span>
+                    </div>
+                    <div class="yurt-door-leaf" id="door-leaf">
+                        <div class="door-symbol">☸</div>
+                        <div class="door-handle"></div>
+                        <div class="door-symbol">☸</div>
+                    </div>
+                </div>
+
+                <!-- Padlocks Rack on Door -->
+                <div class="padlocks-rack" id="padlocks-rack">
+                    <span class="padlock" id="lock-1">🔒</span>
+                    <span class="padlock" id="lock-2">🔒</span>
+                    <span class="padlock" id="lock-3">🔒</span>
+                </div>
+
+                <!-- Intercom Unit: ЮРТ-КОМ 3000 -->
+                <div class="intercom-unit" id="intercom-unit" title="ЮРТ-КОМ 3000 (Нажми для вызова)">
+                    <div class="intercom-antenna"></div>
+                    <div class="intercom-led"></div>
+                    <span class="intercom-label">ЮРТ-КОМ<br>3000</span>
+                    <div class="intercom-grill"></div>
+                    <button class="intercom-call-btn">📞 ВЫЗОВ</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Inventory Dock -->
+    <section class="inventory-dock">
+        <div class="inventory-header">
+            <span class="inventory-title">Мирные подношения / Bribes</span>
+            <span class="inventory-hint" id="inv-hint">👇 Нажми на предмет или домофон</span>
+        </div>
+        <div class="inventory-items-row">
+            <div class="inventory-card" id="item-cake" data-item="cake">
+                <span class="inv-icon">🎂</span>
+                <span class="inv-name">Торт 90 дней</span>
+                <span class="inv-sub">Антиквариат</span>
+            </div>
+            <div class="inventory-card" id="item-tea" data-item="tea">
+                <span class="inv-icon">☕</span>
+                <span class="inv-name">Сүүтэй цай</span>
+                <span class="inv-sub">Чай с молоком</span>
+            </div>
+            <div class="inventory-card" id="item-flowers" data-item="flowers">
+                <span class="inv-icon">💐</span>
+                <span class="inv-name">Цветы степи</span>
+                <span class="inv-sub">Свежий букет</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dialog / Intercom Modal -->
+    <div class="dialog-overlay" id="dialog-modal">
+        <div class="dialog-card">
+            <div class="dialog-speaker-row">
+                <div class="speaker-avatar" id="speaker-avatar">😠</div>
+                <div class="speaker-info">
+                    <span class="speaker-name" id="speaker-name">Зуля (из юрты)</span>
+                    <span class="speaker-sub" id="speaker-sub">Гэр дотроос / Inside yurt</span>
+                </div>
+            </div>
+
+            <div class="dialog-speech-box">
+                <p class="speech-ru" id="dialog-text-ru">Кто там?! Твой день рождения был 26 ИЮНЯ!</p>
+                <p class="speech-en" id="dialog-text-en">Who's there?! Your birthday was JUNE 26th!</p>
+            </div>
+
+            <!-- Dialogue Options List -->
+            <div class="dialog-options-list" id="dialog-options">
+                <!-- Dynamically populated -->
+            </div>
+
+            <!-- Feedback after selecting an option -->
+            <div class="dialog-feedback-box" id="dialog-feedback">
+                <p class="feedback-text-ru" id="feedback-text-ru"></p>
+                <p class="feedback-text-en" id="feedback-text-en"></p>
+                <button class="btn-continue" id="btn-feedback-continue">Продолжить ➔</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info / Story Modal -->
+    <div class="dialog-overlay" id="info-modal">
+        <div class="dialog-card">
+            <div class="dialog-speaker-row">
+                <div class="speaker-avatar">📜</div>
+                <div class="speaker-info">
+                    <span class="speaker-name">Миссия: День Рождения Зули</span>
+                    <span class="speaker-sub">Контекст операции</span>
+                </div>
+            </div>
+            <div class="dialog-speech-box">
+                <p class="speech-ru"><b>Дата рождения:</b> 26 Июня.<br><b>Сегодня:</b> Конец сентября (>90 дней опоздания).<br><br>Зуля закрылась в юрте и на законных основаниях дуется. Твоя задача — задобрить главную буку через домофон и мирные подношения, пока в тебя не прилетел десятый тапок!</p>
+                <p class="speech-en"><b>Birthday:</b> June 26th.<br><b>Today:</b> Late September (90+ days late).<br><br>Zulya is locked inside her yurt, rightfully pouting and grumpy. Your goal is to appease your moodiest friend using the intercom and peace offerings before you get smacked by flying slippers!</p>
+            </div>
+            <button class="btn-continue" id="btn-close-info">Понятно, погнали! 👍</button>
+        </div>
+    </div>
+
+    <!-- Grand Finale Birthday Card Modal -->
+    <div class="finale-overlay" id="finale-modal">
+        <div class="finale-card">
+            <div class="mongol-header-knot">☸ 🌟 ☸</div>
+            
+            <h1 class="finale-title-mn" id="card-title-mn">Төрсөн өдрийн мэнд хүргэе, Зуля! 🎂</h1>
+            <h2 class="finale-title-ru" id="card-title-ru">С Днём Рождения, Зуля! 🎉</h2>
+
+            <!-- Interactive Cake with Blowable Candle -->
+            <div class="cake-celebration-widget" id="cake-widget" title="Нажми, чтобы задуть свечу!">
+                <div class="candle-flame" id="candle-flame">🔥</div>
+                <div class="candle-cake">🎂</div>
+                <span class="cake-tap-hint" id="cake-hint">✨ Нажми на торт, чтобы задуть свечу и загадать желание!</span>
+            </div>
+
+            <!-- Letter Content -->
+            <div class="finale-body-text">
+                <p class="letter-mn">"Хэдийгээр 3 сар хоцорсон ч гэсэн, жинхэнэ нөхөрлөл хэзээ ч хуучрахгүй!"</p>
+                
+                <p class="letter-ru">Дорогая Зуля!
+Да, 26 июня уже давно позади. Этот торт пережил смену времён года, верблюд в пустыне Гоби взял отпуск, а тапки летели со скоростью звука.
+
+Ты имеешь полное законное право дуться на меня ещё три года! Но настоящая дружба крепче любых обид и монгольских ветров. Пусть в жизни будет меньше поводов ворчать и больше поводов для крутых приключений.
+
+Желаю железного терпения (особенно на таких забывчивых друзей), неиссякаемой энергии, крутых успехов и верных друзей рядом!</p>
+
+                <p class="letter-en">"Even 3 months late, true solid friendship never expires. Keep being the coolest (and moodiest) friend ever!"</p>
+            </div>
+
+            <!-- Super Hyperbolic Signature (Platonic Friendship) -->
+            <div class="sender-signature-box">
+                <span class="signature-label-mn">Хамгийн их гэмшсэн, гэхдээ үнэнч найз:</span>
+                <span class="signature-title-mn">БҮХ ЦАГ ҮЕИЙН ХАМГИЙН ШИЛДЭГ НАЙЗ</span>
+                <span class="signature-title-ru">Твой самый виноватый, но лучший друг всех времён и народов 🤝</span>
+            </div>
+
+            <!-- Actions -->
+            <div class="finale-actions">
+                <button class="btn-party" id="btn-re-confetti">🎉 Ещё конфетти и музыки!</button>
+                <button class="btn-restart" id="btn-restart-game">🔄 Сыграть снова</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/audio.js"></script>
+    <script src="js/dialogues.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

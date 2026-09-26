@@ -41,6 +41,7 @@ jobs:
           mkdir -p _site
           cp index.html _site/index.html
           cp -r hbd-nyomin/dist _site/hbd-nyomin
+          cp -r hbd-zul _site/hbd-zul
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
