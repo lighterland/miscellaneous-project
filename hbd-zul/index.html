@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Операция: Прости, Зуля! | Belated HBD</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2.1">
 </head>
 <body>
 
@@ -147,6 +147,7 @@
 
             <div class="dialog-speech-box">
                 <p class="speech-ru" id="dialog-text-ru">Кто там?! Твой день рождения был 26 ИЮНЯ!</p>
+                <div id="dialog-text-en" style="display:none;"></div>
             </div>
 
             <!-- Dialogue Options List -->
@@ -157,6 +158,7 @@
             <!-- Feedback after selecting an option -->
             <div class="dialog-feedback-box" id="dialog-feedback">
                 <p class="feedback-text-ru" id="feedback-text-ru"></p>
+                <div id="feedback-text-en" style="display:none;"></div>
                 <button class="btn-continue" id="btn-feedback-continue">Продолжить ➔</button>
             </div>
         </div>
@@ -179,9 +181,13 @@
         </div>
     </div>
 
+    <!-- Floating Re-open Card Button -->
+    <button id="btn-floating-card" class="btn-floating-card" style="display:none;" title="Открыть поздравление">📜 Открытка Зули</button>
+
     <!-- Grand Finale Birthday Card Modal -->
     <div class="finale-overlay" id="finale-modal">
         <div class="finale-card">
+            <button class="btn-close-card" id="btn-close-finale" title="Закрыть открытку и посмотреть на юрту">✕</button>
             <div class="mongol-header-knot">☸ 🌟 ☸</div>
             
             <h1 class="finale-title-mn" id="card-title-mn">Төрсөн өдрийн мэнд хүргэе, Зуля! 🎂</h1>
@@ -216,14 +222,15 @@
             <!-- Actions -->
             <div class="finale-actions">
                 <button class="btn-party" id="btn-re-confetti">🎉 Ещё конфетти и музыки!</button>
+                <button class="btn-view-yurt" id="btn-view-yurt">👀 Посмотреть на юрту и Зулю</button>
                 <button class="btn-restart" id="btn-restart-game">🔄 Сыграть снова</button>
             </div>
         </div>
     </div>
 
     <!-- Scripts -->
-    <script src="js/audio.js"></script>
-    <script src="js/dialogues.js"></script>
-    <script src="js/game.js"></script>
+    <script src="js/audio.js?v=2.1"></script>
+    <script src="js/dialogues.js?v=2.1"></script>
+    <script src="js/game.js?v=2.1"></script>
 </body>
 </html>

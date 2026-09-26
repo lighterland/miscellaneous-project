@@ -7,15 +7,20 @@ class SoundEngine {
         this.muted = false;
         this.bgmPlaying = false;
         this.bgmTimeout = null;
+        this.activeOscillators = [];
     }
 
-    init() {
+    async init() {
         if (!this.ctx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.ctx = new AudioContext();
         }
-        if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+        if (this.ctx && this.ctx.state === 'suspended') {
+            try {
+                await this.ctx.resume();
+            } catch (e) {
+                console.warn('Audio resume error:', e);
+            }
         }
     }
 
@@ -250,10 +255,13 @@ class SoundEngine {
     }
 
     // 8-Bit Celebratory Birthday Fanfare
-    playBirthdayFanfare() {
+    async playBirthdayFanfare() {
         if (this.muted) return;
-        this.init();
-        this.stopBGM(); // Cleanly reset any ongoing loop
+        await this.init();
+        if (this.ctx && this.ctx.state === 'suspended') {
+            try { await this.ctx.resume(); } catch (e) {}
+        }
+        this.stopBGM(); // Cleanly reset any ongoing loop and active oscillators
         this.bgmPlaying = true;
 
         // Notes in Hz
@@ -270,7 +278,7 @@ class SoundEngine {
             ['F5', 0.25], ['F5', 0.15], ['E5', 0.4], ['C5', 0.4], ['D5', 0.4], ['C5', 1.0]
         ];
 
-        let cursor = this.ctx.currentTime + 0.1;
+        let cursor = this.ctx.currentTime + 0.08;
         const now = cursor;
 
         song.forEach(([pitch, dur]) => {
@@ -280,6 +288,7 @@ class SoundEngine {
                 // Lead Melody (Square wave)
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
+                this.activeOscillators.push(osc);
 
                 osc.type = 'square';
                 osc.frequency.setValueAtTime(freq, cursor);
@@ -297,6 +306,8 @@ class SoundEngine {
                 // Bass arpeggio accompaniment (Triangle wave)
                 const bassOsc = this.ctx.createOscillator();
                 const bassGain = this.ctx.createGain();
+                this.activeOscillators.push(bassOsc);
+
                 bassOsc.type = 'triangle';
                 bassOsc.frequency.setValueAtTime(freq / 2, cursor);
 
@@ -327,8 +338,27 @@ class SoundEngine {
             clearTimeout(this.bgmTimeout);
             this.bgmTimeout = null;
         }
+        if (this.activeOscillators && this.activeOscillators.length > 0) {
+            this.activeOscillators.forEach(osc => {
+                try {
+                    osc.stop();
+                    osc.disconnect();
+                } catch (e) {}
+            });
+            this.activeOscillators = [];
+        }
     }
 }
 
 // Global Sound Instance
 window.soundEngine = new SoundEngine();
+
+// Mobile browser audio gesture unlock on first touch/interaction
+const unlockAudioOnTouch = () => {
+    if (window.soundEngine) {
+        window.soundEngine.init();
+    }
+};
+['click', 'touchstart', 'touchend', 'pointerdown'].forEach(evt => {
+    window.addEventListener(evt, unlockAudioOnTouch, { passive: true, once: false });
+});

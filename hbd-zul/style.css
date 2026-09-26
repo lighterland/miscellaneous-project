@@ -496,6 +496,7 @@ body {
     display: flex;
     gap: 4px;
     z-index: 15;
+    pointer-events: none;
 }
 
 .padlock {
@@ -503,6 +504,7 @@ body {
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
     animation: lockPop 0.3s ease;
     transition: transform 0.3s ease, opacity 0.3s ease;
+    pointer-events: none;
 }
 
 .padlock.unlocking {
@@ -1141,6 +1143,91 @@ body {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
+}
+
+.btn-view-yurt {
+    background: #e9ecef;
+    color: var(--mongol-dark);
+    border: 1px solid #ced4da;
+    border-radius: 12px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.2s;
+}
+
+.btn-view-yurt:active {
+    background: #dee2e6;
+    transform: scale(0.97);
+}
+
+.btn-close-card {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    background: rgba(0, 0, 0, 0.08);
+    border: none;
+    border-radius: 50%;
+    font-size: 16px;
+    font-weight: 800;
+    color: #495057;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    z-index: 10;
+}
+
+.btn-close-card:active {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.btn-floating-card {
+    position: fixed;
+    bottom: calc(140px + env(safe-area-inset-bottom, 10px));
+    right: 16px;
+    background: linear-gradient(135deg, var(--mongol-gold), #f77f00);
+    color: #491101;
+    border: 2px solid white;
+    border-radius: 24px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: bounceSlow 2s infinite;
+}
+
+.btn-floating-card:active {
+    transform: scale(0.94);
+}
+
+@keyframes bounceSlow {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+@keyframes pulseBorder {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(245, 159, 0, 0.7);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(245, 159, 0, 0);
+        transform: scale(1.05);
+    }
 }
 
 /* ================= Confetti Canvas ================= */

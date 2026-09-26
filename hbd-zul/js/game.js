@@ -42,9 +42,11 @@ class GameController {
         // Modals
         this.dialogModal = document.getElementById('dialog-modal');
         this.dialogTextRu = document.getElementById('dialog-text-ru');
+        this.dialogTextEn = document.getElementById('dialog-text-en');
         this.dialogOptions = document.getElementById('dialog-options');
         this.dialogFeedback = document.getElementById('dialog-feedback');
         this.feedbackTextRu = document.getElementById('feedback-text-ru');
+        this.feedbackTextEn = document.getElementById('feedback-text-en');
         this.btnFeedbackContinue = document.getElementById('btn-feedback-continue');
         this.speakerAvatar = document.getElementById('speaker-avatar');
 
@@ -52,6 +54,9 @@ class GameController {
         this.btnCloseInfo = document.getElementById('btn-close-info');
 
         this.finaleModal = document.getElementById('finale-modal');
+        this.btnCloseFinale = document.getElementById('btn-close-finale');
+        this.btnViewYurt = document.getElementById('btn-view-yurt');
+        this.btnFloatingCard = document.getElementById('btn-floating-card');
         this.cakeWidget = document.getElementById('cake-widget');
         this.candleFlame = document.getElementById('candle-flame');
         this.cakeHint = document.getElementById('cake-hint');
@@ -77,13 +82,26 @@ class GameController {
             this.infoModal.classList.remove('active');
         });
 
-        // Intercom & Door Clicks
+        // Intercom & Door & Padlocks Clicks
         this.intercomUnit.addEventListener('click', () => this.handleIntercomCall());
         this.yurtDoor.addEventListener('click', () => {
-            if (this.stage === 'victory') return;
+            if (this.stage === 'victory') {
+                this.finaleModal.classList.add('active');
+                return;
+            }
             window.soundEngine.playKnock();
             this.handleIntercomCall();
         });
+        if (this.padlocksRack) {
+            this.padlocksRack.addEventListener('click', () => {
+                if (this.stage === 'victory') {
+                    this.finaleModal.classList.add('active');
+                    return;
+                }
+                window.soundEngine.playKnock();
+                this.handleIntercomCall();
+            });
+        }
 
         // Inventory Items
         this.itemCake.addEventListener('click', () => this.handleOfferItem('cake'));
@@ -100,17 +118,45 @@ class GameController {
             }
         });
 
+        // Finale Modal Controls
+        if (this.btnCloseFinale) {
+            this.btnCloseFinale.addEventListener('click', () => {
+                this.finaleModal.classList.remove('active');
+                if (this.btnFloatingCard) this.btnFloatingCard.style.display = 'flex';
+            });
+        }
+        if (this.btnViewYurt) {
+            this.btnViewYurt.addEventListener('click', () => {
+                this.finaleModal.classList.remove('active');
+                if (this.btnFloatingCard) this.btnFloatingCard.style.display = 'flex';
+            });
+        }
+        if (this.btnFloatingCard) {
+            this.btnFloatingCard.addEventListener('click', () => {
+                this.finaleModal.classList.add('active');
+            });
+        }
+
         // Finale Cake & Candle
         this.cakeWidget.addEventListener('click', () => this.blowCandle());
-        this.btnReConfetti.addEventListener('click', () => {
-            window.soundEngine.init();
+        
+        let lastPartyTime = 0;
+        this.btnReConfetti.addEventListener('click', async (e) => {
+            if (e) e.stopPropagation();
+            const now = Date.now();
+            if (now - lastPartyTime < 350) return;
+            lastPartyTime = now;
+
+            await window.soundEngine.init();
             if (window.soundEngine.muted) {
                 window.soundEngine.muted = false;
                 this.btnAudio.textContent = '🔊';
             }
             window.soundEngine.playBirthdayFanfare();
             this.spawnConfettiBurst();
+            setTimeout(() => this.spawnConfettiBurst(), 220);
         });
+
         this.btnRestartGame.addEventListener('click', () => location.reload());
 
         // Horse Easter Egg
@@ -209,7 +255,7 @@ class GameController {
         if (this.stage === 'intro') {
             this.showDialogue(window.GAME_DIALOGUES.intro);
         } else if (this.stage === 'bribes') {
-            if (this.usedItems.size === 3 || this.locksCount <= 1) {
+            if (this.usedItems.size >= 2 || this.locksCount <= 1) {
                 this.stage = 'final';
                 this.showDialogue(window.GAME_DIALOGUES.stage_final_question);
             } else {
@@ -237,19 +283,22 @@ class GameController {
         this.updateRageHUD();
         this.removeOneLock();
 
-        // Show dialogue reaction
-        this.showItemReaction(itemData);
-
         // Advance stage if needed
         if (this.stage === 'intro') {
             this.stage = 'bribes';
         }
 
-        if (this.usedItems.size >= 2 && this.locksCount <= 1) {
+        if (this.usedItems.size >= 3 || this.locksCount <= 1 || (this.usedItems.size >= 2 && this.locksCount <= 2)) {
             this.stage = 'final';
-            this.invHint.textContent = "⚡ Зуля готова слушать! Нажми на домофон!";
+            this.invHint.textContent = "⚡ Зуля готова слушать! Нажми на домофон или дверь!";
             this.intercomUnit.style.animation = 'pulseBorder 1.2s infinite';
+            this.yurtDoor.style.animation = 'pulseBorder 1.2s infinite';
+        } else {
+            this.invHint.textContent = `🎁 Подношение ${this.usedItems.size}/3 принято! Выбери ещё или нажми на дверь!`;
         }
+
+        // Show dialogue reaction
+        this.showItemReaction(itemData);
     }
 
     showDialogue(dialogueObj) {
@@ -258,6 +307,9 @@ class GameController {
         this.dialogOptions.innerHTML = '';
 
         this.dialogTextRu.textContent = dialogueObj.textRu;
+        if (this.dialogTextEn && dialogueObj.textEn) {
+            this.dialogTextEn.textContent = dialogueObj.textEn;
+        }
 
         // Avatar expression
         if (dialogueObj.mood === 'furious') this.speakerAvatar.textContent = '😠';
@@ -311,6 +363,11 @@ class GameController {
         btn.textContent = 'Отлично! Продолжаем ➔';
         btn.addEventListener('click', () => {
             this.dialogModal.classList.remove('active');
+            if (this.stage === 'final') {
+                setTimeout(() => {
+                    this.showDialogue(window.GAME_DIALOGUES.stage_final_question);
+                }, 350);
+            }
         });
         this.dialogOptions.appendChild(btn);
 
@@ -326,6 +383,9 @@ class GameController {
             this.rageLevel = Math.min(100, this.rageLevel + (option.rageDelta || 15));
             this.addOneLock();
             this.speakerAvatar.textContent = '🤬';
+            if (this.stage === 'intro') {
+                this.invHint.textContent = "👇 Выбери мирное подношение или снова позвони в домофон!";
+            }
         } else if (option.type === 'victory') {
             this.rageLevel = 0;
             this.locksCount = 0;
@@ -341,12 +401,16 @@ class GameController {
             this.speakerAvatar.textContent = '😏';
             if (this.stage === 'intro') {
                 this.stage = 'bribes';
+                this.invHint.textContent = "👇 Выбери мирное подношение (Торт, Чай, Цветы)!";
             }
         }
 
         this.updateRageHUD();
 
         this.feedbackTextRu.textContent = option.responseRu;
+        if (this.feedbackTextEn && option.responseEn) {
+            this.feedbackTextEn.textContent = option.responseEn;
+        }
         this.dialogFeedback.classList.add('active');
     }
 
@@ -372,10 +436,15 @@ class GameController {
         // Confetti burst
         this.spawnConfettiBurst();
 
+        // Enable floating card badge so user can reopen whenever they want
+        if (this.btnFloatingCard) {
+            this.btnFloatingCard.style.display = 'flex';
+        }
+
         // Open Finale modal
         setTimeout(() => {
             this.finaleModal.classList.add('active');
-        }, 1000);
+        }, 1200);
     }
 
     blowCandle() {
