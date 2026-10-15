@@ -1,0 +1,1027 @@
+/* ==========================================================================
+   NusaEco — Flagship B2B Sustainable Materials Interface
+   Aesthetic: Dark Luxe Biophilic / Swiss Precision / 100% Tailored Visuals
+   Palette: Forest Obsidian (#07160E), Deep Pine (#0F291B), Alabaster (#F8F7F4),
+            Bamboo Ochre (#C59E68), Warm Stone (#EDE8DF), Pure White (#FFFFFF)
+   Typography: Plus Jakarta Sans (Clean Modern Geometric Grotesk)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* Core Colors */
+  --c-obsidian:     #07160E;
+  --c-dark-pine:    #0E281C;
+  --c-pine-mid:     #173B2A;
+  --c-forest-card:  #122F21;
+  --c-leaf-green:   #2F6746;
+  --c-ochre:        #C59E68;
+  --c-ochre-light:  #F4EADB;
+  --c-ochre-hover:  #B58C54;
+  
+  /* Light Accents & Surfaces */
+  --c-bg-light:     #F8F7F4;
+  --c-surface:      #FFFFFF;
+  --c-warm-stone:   #EFEBE2;
+  --c-text-dark:    #161E1A;
+  --c-text-muted:   #54625A;
+  --c-text-subtle:  #87968D;
+  --c-border-light: rgba(14, 40, 28, 0.08);
+  --c-border-dark:  rgba(255, 255, 255, 0.14);
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Geometry & Shadows */
+  --max-w: 1200px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.04);
+  --shadow-card:   0 10px 30px rgba(0, 0, 0, 0.06);
+  --shadow-elevate: 0 20px 48px rgba(7, 22, 14, 0.16);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Base Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+  overflow-x: clip;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--c-bg-light);
+  color: var(--c-text-dark);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--max-w);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+/* Animations */
+@keyframes fadeInSlide {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeInSlide 0.7s var(--ease) forwards;
+}
+
+.delay-1 { animation-delay: 0.15s; }
+.delay-2 { animation-delay: 0.25s; }
+
+/* ==========================================================================
+   Header (Sleek Dark Luxe Glass)
+   ========================================================================== */
+.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(7, 22, 14, 0.90);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--c-border-dark);
+  height: 72px;
+  display: flex;
+  align-items: center;
+  transition: all 0.3s var(--ease);
+}
+
+.nav-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--c-ochre);
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-obsidian);
+  flex-shrink: 0;
+}
+
+.brand-text-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+  line-height: 1;
+}
+
+.brand-subtitle {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--c-ochre);
+  margin-top: 2px;
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 2.25rem;
+  list-style: none;
+}
+
+.nav-link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  transition: color 0.2s ease;
+}
+
+.nav-link:hover {
+  color: #FFFFFF;
+}
+
+/* Button System */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.7rem 1.45rem;
+  border-radius: var(--radius-xs);
+  transition: all 0.2s var(--ease);
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+}
+
+.btn-ochre {
+  background: var(--c-ochre);
+  color: var(--c-obsidian);
+}
+
+.btn-ochre:hover {
+  background: var(--c-ochre-hover);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(197, 158, 104, 0.35);
+}
+
+.btn-glass {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.btn-dark {
+  background: var(--c-dark-pine);
+  color: #FFFFFF;
+}
+
+.btn-dark:hover {
+  background: var(--c-pine-mid);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Hero Section (Atmospheric Plantation Background & Real Cocktail Visual)
+   ========================================================================== */
+.hero {
+  position: relative;
+  min-height: 85vh;
+  display: flex;
+  align-items: center;
+  padding-top: 130px;
+  padding-bottom: 90px;
+  background: 
+    linear-gradient(180deg, rgba(7, 22, 14, 0.80) 0%, rgba(7, 22, 14, 0.94) 100%),
+    url('assets/images/bamboo_plantation.jpg') center/cover no-repeat;
+  color: #FFFFFF;
+  border-bottom: 1px solid var(--c-border-dark);
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 4.5rem;
+  align-items: center;
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--c-ochre);
+  padding: 0.3rem 0.85rem;
+  background: rgba(197, 158, 104, 0.12);
+  border: 1px solid rgba(197, 158, 104, 0.35);
+  border-radius: var(--radius-xs);
+  margin-bottom: 1.5rem;
+}
+
+.hero-kicker-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ochre);
+}
+
+.hero-title {
+  font-size: clamp(2.3rem, 4.2vw, 3.8rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: #FFFFFF;
+  margin-bottom: 1.25rem;
+}
+
+.hero-desc {
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.7;
+  max-width: 560px;
+  margin-bottom: 2.25rem;
+}
+
+.hero-cta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 3.5rem;
+}
+
+.hero-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-number {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--c-ochre);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 0.4rem;
+  font-weight: 500;
+}
+
+/* Hero Media Display (Cocktail with Real Bamboo Straw) */
+.hero-photo-frame {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  aspect-ratio: 4 / 4.2;
+}
+
+.hero-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s var(--ease);
+}
+
+.hero-photo-frame:hover img {
+  transform: scale(1.03);
+}
+
+.hero-photo-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1.75rem;
+  background: linear-gradient(180deg, transparent 0%, rgba(7, 22, 14, 0.95) 85%);
+  color: #FFFFFF;
+}
+
+.photo-badge-category {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-ochre);
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.photo-badge-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* ==========================================================================
+   Section Shared Layout
+   ========================================================================== */
+.section {
+  padding-top: 95px;
+  padding-bottom: 95px;
+}
+
+.section-head {
+  margin-bottom: 3.5rem;
+}
+
+.section-head.center {
+  text-align: center;
+  max-width: 660px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.section-kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--c-leaf-green);
+  margin-bottom: 0.6rem;
+  display: block;
+}
+
+.section-title {
+  font-size: clamp(2rem, 3vw, 2.75rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--c-text-dark);
+  line-height: 1.2;
+  margin-bottom: 0.85rem;
+}
+
+.section-lead {
+  font-size: 1.05rem;
+  color: var(--c-text-muted);
+  line-height: 1.65;
+}
+
+/* ==========================================================================
+   Products Grid (Accurate Visuals & Sharp Specifications)
+   ========================================================================== */
+.products-section {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.75rem;
+}
+
+.product-item {
+  background: var(--c-bg-light);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s var(--ease);
+}
+
+.product-item:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-card);
+  border-color: rgba(14, 40, 28, 0.22);
+}
+
+.product-thumb {
+  position: relative;
+  aspect-ratio: 16 / 12;
+  overflow: hidden;
+  background: var(--c-warm-stone);
+}
+
+.product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s var(--ease);
+}
+
+.product-item:hover .product-thumb img {
+  transform: scale(1.05);
+}
+
+.product-pill-tag {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--c-obsidian);
+  color: #FFFFFF;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-xs);
+}
+
+.product-pill-tag.gold {
+  background: var(--c-ochre);
+  color: var(--c-obsidian);
+}
+
+.product-body {
+  padding: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.product-cat {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-leaf-green);
+  margin-bottom: 0.35rem;
+}
+
+.product-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--c-text-dark);
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.product-description {
+  font-size: 0.875rem;
+  color: var(--c-text-muted);
+  line-height: 1.6;
+  margin-bottom: 1.4rem;
+  flex-grow: 1;
+}
+
+.product-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--c-border-light);
+}
+
+.chip {
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--c-surface);
+  color: var(--c-text-dark);
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--c-border-light);
+}
+
+/* ==========================================================================
+   Comparison Table (Clear & Definitive)
+   ========================================================================== */
+.matrix-section {
+  background: var(--c-bg-light);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.matrix-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-md);
+  padding: 2.75rem;
+  box-shadow: var(--shadow-subtle);
+  overflow-x: auto;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.comparison-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-text-muted);
+  padding: 1rem 1.25rem 1.25rem;
+  border-bottom: 2px solid var(--c-border-light);
+}
+
+.comparison-table th.highlight-col {
+  color: var(--c-leaf-green);
+}
+
+.comparison-table td {
+  padding: 1.25rem 1.25rem;
+  font-size: 0.925rem;
+  border-bottom: 1px solid var(--c-border-light);
+  color: var(--c-text-dark);
+}
+
+.comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+.cell-verified {
+  font-weight: 700;
+  color: var(--c-text-dark);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cell-verified svg {
+  color: var(--c-leaf-green);
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Traceability & Sourcing (Subtle Origin Context)
+   ========================================================================== */
+.origin-section {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.origin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4.5rem;
+  align-items: center;
+}
+
+.origin-photo-wrap {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--c-border-light);
+  aspect-ratio: 16 / 11;
+}
+
+.origin-photo-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.origin-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  margin-top: 1.75rem;
+}
+
+.origin-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.origin-item-bullet {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-leaf-green);
+  margin-top: 0.5rem;
+  flex-shrink: 0;
+}
+
+.origin-item-text h5 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--c-text-dark);
+  margin-bottom: 0.2rem;
+}
+
+.origin-item-text p {
+  font-size: 0.875rem;
+  color: var(--c-text-muted);
+  line-height: 1.55;
+}
+
+/* ==========================================================================
+   Realistic Testimonials (Humanized Endorsements)
+   ========================================================================== */
+.cases-section {
+  background: var(--c-bg-light);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.cases-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.75rem;
+}
+
+.case-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-sm);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-subtle);
+}
+
+.case-quote {
+  font-size: 0.925rem;
+  line-height: 1.7;
+  color: var(--c-text-dark);
+  margin-bottom: 1.75rem;
+}
+
+.case-author {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--c-border-light);
+}
+
+.author-photo {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--c-ochre);
+}
+
+.author-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--c-text-dark);
+}
+
+.author-title {
+  font-size: 0.775rem;
+  color: var(--c-text-subtle);
+}
+
+/* ==========================================================================
+   Seamless Accordion FAQ
+   ========================================================================== */
+.faq-section {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.faq-wrapper {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.faq-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.faq-entry {
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-xs);
+  background: var(--c-bg-light);
+  transition: all 0.2s ease;
+}
+
+.faq-entry[open] {
+  border-color: var(--c-leaf-green);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-subtle);
+}
+
+.faq-question {
+  padding: 1.35rem 1.6rem;
+  font-size: 0.985rem;
+  font-weight: 600;
+  color: var(--c-text-dark);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+.faq-question::-webkit-details-marker {
+  display: none;
+}
+
+.faq-arrow-icon {
+  width: 18px;
+  height: 18px;
+  stroke: var(--c-text-muted);
+  transition: transform 0.25s var(--ease);
+  flex-shrink: 0;
+}
+
+.faq-entry[open] .faq-arrow-icon {
+  transform: rotate(180deg);
+  stroke: var(--c-text-dark);
+}
+
+.faq-body {
+  padding: 0 1.6rem 1.35rem;
+  font-size: 0.9rem;
+  color: var(--c-text-muted);
+  line-height: 1.7;
+}
+
+/* ==========================================================================
+   Clean B2B Procurement Form
+   ========================================================================== */
+.contact-section {
+  background: var(--c-bg-light);
+}
+
+.form-enclosure {
+  max-width: 700px;
+  margin: 0 auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-md);
+  padding: 2.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+.form-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+  margin-bottom: 1.1rem;
+}
+
+.form-field {
+  margin-bottom: 1.1rem;
+}
+
+.form-field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--c-text-dark);
+  margin-bottom: 0.4rem;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--c-bg-light);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-xs);
+  font-size: 0.9rem;
+  color: var(--c-text-dark);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  background: #FFFFFF;
+  border-color: var(--c-text-dark);
+  box-shadow: 0 0 0 3px rgba(7, 22, 14, 0.08);
+}
+
+/* Toast */
+.toast-box {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--c-obsidian);
+  color: #FFFFFF;
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--c-ochre);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  z-index: 2000;
+  transform: translateY(160%);
+  transition: transform 0.35s var(--ease);
+}
+
+.toast-box.active {
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   Footer (Legal & Corporate)
+   ========================================================================== */
+.site-footer {
+  background: var(--c-obsidian);
+  color: #FFFFFF;
+  padding: 4rem 0 2.5rem;
+  border-top: 1px solid var(--c-border-dark);
+}
+
+.footer-main {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 3.5rem;
+  padding-bottom: 3rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer-brand h4 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  margin-bottom: 0.6rem;
+  color: #FFFFFF;
+}
+
+.footer-brand p {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.65;
+  max-width: 320px;
+}
+
+.footer-col h5 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-ochre);
+  margin-bottom: 1.15rem;
+}
+
+.footer-links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.footer-links a {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+  transition: color 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: #FFFFFF;
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 2rem;
+  font-size: 0.775rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ==========================================================================
+   Responsive Adaptations (Mobile / Tablet / Desktop)
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .hero-grid,
+  .origin-grid {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+  .products-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .cases-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .footer-main {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+  .nav-menu {
+    display: none;
+  }
+  .hero {
+    padding-top: 105px;
+    padding-bottom: 60px;
+    min-height: auto;
+  }
+  .hero-title {
+    font-size: 2.1rem;
+  }
+  .hero-desc {
+    font-size: 1rem;
+  }
+  .hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 2rem;
+  }
+  .hero-cta .btn {
+    width: 100%;
+  }
+  .hero-stats-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding-top: 1.5rem;
+  }
+  .products-grid,
+  .cases-grid,
+  .footer-main {
+    grid-template-columns: 1fr;
+  }
+  .form-split-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .form-enclosure {
+    padding: 1.75rem;
+  }
+  .matrix-card {
+    padding: 1.5rem;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+}

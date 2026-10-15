@@ -12,6 +12,7 @@ Each project is self-contained in its own folder and automatically built & deplo
 | :--- | :--- | :--- | :--- |
 | **🌸 Nyomin's Birthday Quest** | [`/hbd-nyomin`](./hbd-nyomin) | Whimsical retro 2D pixel-art birthday quest with TibiaME-style grid movement, custom avatar, and cozy surprises. | [`/hbd-nyomin/`](https://lighterland.github.io/miscellaneous-project/hbd-nyomin/) |
 | **🇲🇳 Операция: Прости, Зуля!** | [`/hbd-zul`](./hbd-zul) | Interactive belated birthday yurt mystery in the Mongolian steppes with intercom interrogations & peace offerings (90+ days late!). | [`/hbd-zul/`](https://lighterland.github.io/miscellaneous-project/hbd-zul/) |
+| **🌿 NusaEco B2B Showcase** | [`/nusaeco`](./nusaeco) | Premium 100% biodegradable tableware & bio-packaging mock-up for HoReCa. Indonesian origin, Swiss dark luxe design. | [`/nusaeco/`](https://lighterland.github.io/miscellaneous-project/nusaeco/) |
 
 ---
 
