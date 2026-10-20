@@ -44,6 +44,27 @@ jobs:
           cp -r hbd-zul _site/hbd-zul
           cp -r nusaeco _site/nusaeco
 
+      - name: Cache Akutoo npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-akutoo-npm-${{ hashFiles('akutoo-m0/package-lock.json') }}
+
+      - name: Install Akutoo dependencies
+        working-directory: akutoo-m0
+        run: npm ci
+
+      - name: Test Akutoo units
+        working-directory: akutoo-m0
+        run: npm test
+
+      - name: Build Akutoo
+        working-directory: akutoo-m0
+        run: npm run build
+
+      - name: Assemble Akutoo
+        run: cp -r akutoo-m0/dist _site/akutoo-m0
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
