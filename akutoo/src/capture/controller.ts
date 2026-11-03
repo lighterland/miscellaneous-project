@@ -1,3 +1,5 @@
+import {selectSweepShot,finishSweep,sweepActive,chooseTimedProfile} from '../session/free-sweep';
+import {handsFreeStep} from './hands-free';
 import {autoCaptureReady} from './auto-ready';
 import {poseGuidance, type PoseCue} from './pose-guidance';
 import { AnalysisClient } from '../analysis/client';
@@ -22,7 +24,7 @@ export interface CaptureState {
   session: Session; running: boolean; loading: boolean; paused: boolean; busy: boolean; modelFailed: boolean;
   message: string; seconds: number; result: AnalysisResult | null; quality: QualityResult | null;
   pending: { photo: Photo; full: Blob; thumb: Blob; url: string } | null; camera: 'user' | 'environment';
-  retakeFinished: boolean; coveredBins: string[]; autoReady:boolean; holdProgress:number; poseCue:PoseCue|null;
+  retakeFinished: boolean; coveredBins: string[]; autoReady:boolean; holdProgress:number; poseCue:PoseCue|null; countdown:number|null; handsFreeReturning:boolean;
 }
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export class CaptureController {
@@ -36,9 +38,11 @@ export class CaptureController {
   private lastCapture = 0;
   private previousPose: { yaw: number; pitch: number; time: number } | null = null;
   private disposed = false;
+  private countdownTimer?:ReturnType<typeof setInterval>;
+  private countdownGeneration=0;
   constructor(private video: HTMLVideoElement, session: Session, private changed: (state: CaptureState) => void, camera?: CameraSource) {
     this.camera = camera ?? new BrowserCamera(video);
-    this.state = { session: { ...session, progress: session.progress ? upgradeProgress(session.progress) : freshProgress(Date.now()) }, running: false, loading: false, paused: false, busy: false, modelFailed: false, message: s.scanIntro, seconds: 5, result: null, quality: null, pending: null, camera: session.camera ?? 'user', retakeFinished: false, coveredBins: [],autoReady:false,holdProgress:0,poseCue:null };
+    this.state = { session: { ...session, progress: session.progress ? upgradeProgress(session.progress) : freshProgress(Date.now()) }, running: false, loading: false, paused: false, busy: false, modelFailed: false, message: s.scanIntro, seconds: 5, result: null, quality: null, pending: null, camera: session.camera ?? 'user', retakeFinished: false, coveredBins: [],autoReady:false,holdProgress:0,poseCue:null,countdown:null,handsFreeReturning:false };
     void this.refreshCoverage().catch(() => { this.state.message = s.saveError; this.emit(); });
   }
   private emit() { if(!this.state.running||this.state.paused||this.state.busy||this.state.pending||this.state.modelFailed){this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;} if (!this.disposed) this.changed({ ...this.state }); }
@@ -90,11 +94,12 @@ export class CaptureController {
     const attempts = this.progress.attempts, elapsed = elapsedAttempts(attempts, Date.now());
     if (attempts !== elapsed) { this.progress.attempts = elapsed; try { await this.persist(); } catch (error) { this.state.message = error instanceof SessionConflict ? s.sessionChanged : s.saveError; this.emit(); } }
     if (generation !== this.generation) return;
-    if (this.state.paused || this.state.busy || this.state.pending || !this.analysis || !this.shot) { this.schedule(generation); return; }
+    if (this.state.paused || this.state.busy || this.state.pending || this.state.countdown!==null || !this.analysis || !this.shot) { this.schedule(generation); return; }
     try {
       this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
       const result = await this.measure(this.video);
       if (generation !== this.generation) return;
+      if(this.state.countdown!==null||this.state.paused||this.state.pending){this.schedule(generation);return;}
       this.state.result = result;
       const now = performance.now();
       const m = this.metrics(result);
@@ -108,6 +113,10 @@ export class CaptureController {
           await this.persist();
         }
       } else {
+        if(!this.state.session.retakePhotoId&&!this.state.session.details?.active){
+          const selected=selectSweepShot(this.progress,result.pose);
+          if(selected!==null&&selected!==this.progress.index){this.progress={...this.progress,index:selected};this.hold=null;this.previousPose=null;}
+        }
         const quality = this.grade(result, this.shot); this.state.quality = quality;
         const pose = result.pose;
         const velocity = pose && this.previousPose ? Math.hypot(pose.yaw - this.previousPose.yaw, pose.pitch - this.previousPose.pitch) * 1000 / Math.max(1, now - this.previousPose.time) : Infinity;
@@ -177,7 +186,7 @@ export class CaptureController {
       interrupted();
       const id = crypto.randomUUID();
       const photo: Photo = { id, sessionId: this.state.session.id, opfsPath: `sessions/${this.state.session.id}/${id}.jpg`, thumbPath: `thumbs/${id}.jpg`, width: best.canvas.width, height: best.canvas.height, createdAt: Date.now(), source: 'captured', shotId: shot.id,
-        binId: !shot.detail && best.result?.pose ? poseBin(best.result.pose.yaw, best.result.pose.pitch) : undefined, pose: best.result?.pose ?? null, poseConvention: best.result?.pose ? 'subject-left-negative-v2' : undefined, quality: best.quality, measurements: best.result ? this.metrics(best.result) ?? undefined : undefined, hash: shot.detail ? null : best.result?.hash ?? null, camera: this.state.camera, method, override: false,
+        binId: !shot.detail && best.result?.pose ? poseBin(best.result.pose.yaw, best.result.pose.pitch) : undefined, pose: best.result?.pose ?? null, poseConvention: best.result?.pose ? 'subject-left-negative-v2' : undefined, captureTrigger:this.state.countdown!==null?'countdown':manual?'manual':'automatic', quality: best.quality, measurements: best.result ? this.metrics(best.result) ?? undefined : undefined, hash: shot.detail ? null : best.result?.hash ?? null, camera: this.state.camera, method, override: false,
         streamDimensions: this.state.session.stream ? { ...this.state.session.stream } : undefined, requestedYaw: shot.detail ? undefined : shot.yaw, requestedPitch: shot.detail ? undefined : shot.pitch, expression: shot.expression, direction: shot.direction, context: shot.context, relaxed: this.progress.attempts.relaxed,
         bestAttempt: this.progress.attempts.slotAttempts >= 2 && best.quality.tier === 'C', baseline: this.baseline ? { ...this.baseline } : undefined, ratios: shot.detail ? null : best.result?.ratios ?? null,
         ...(shot.detail ? { detail: { instruction: shot.detail, target: best.result?.target ?? null, faceMeasurements: best.result?.measurements ?? null, reviewed: false } } : {}) };
@@ -213,10 +222,11 @@ export class CaptureController {
     this.state.retakeFinished = wasRetake;
     this.clearPending(); this.previousPose = null;this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
     if (photo.detail) { this.baseline = undefined; this.calibration = { began: null, values: [] }; this.state.seconds = 5; this.state.quality = null; }
-    if (!this.shot) { this.stop(); this.state.session.status = 'review'; await this.persist(); }
+    if (!this.shot) { this.stop(this.state.countdown!==null); this.state.session.status = 'review'; await this.persist(); }
     this.emit();
   }
   async keepAnyway() {
+    this.state.handsFreeReturning=false;
     const pending = this.state.pending; if (!pending || this.state.busy) return;
     this.state.busy = true; this.emit();
     try { await this.commit({ ...pending.photo, override: true }, pending.full, pending.thumb); this.state.paused = false; }
@@ -225,7 +235,7 @@ export class CaptureController {
   }
   clearPending() { if (this.state.pending) URL.revokeObjectURL(this.state.pending.url); this.state.pending = null; }
   async skip(reason: string) {
-    this.clearPending(); this.hold = null;
+    this.cancelCountdown();this.clearPending(); this.hold = null;
     if (this.state.session.retakePhotoId) {
       this.state.session.retakePhotoId = undefined; this.state.session.retakeShotId = undefined; this.state.retakeFinished = true;
       this.stop(); this.state.session.status = 'review'; await this.persist(); return;
@@ -242,13 +252,42 @@ export class CaptureController {
     this.progress.attempts = resetCause(this.progress.attempts); this.state.paused = false; await this.persist();
   }
   async retryCapture() {
+    this.state.handsFreeReturning=false;
     this.clearPending();
     if (this.progress.attempts.moveOn || this.progress.attempts.promptRetake === false) { await this.skip('failed'); return; }
     this.state.paused = false; this.emit();
   }
+  cancelCountdown() {
+    this.countdownGeneration++;clearInterval(this.countdownTimer);this.countdownTimer=undefined;
+    this.state.countdown=null;this.state.handsFreeReturning=false;
+  }
+  async startHandsFree(yaw?:-90|90) {
+    if(!this.state.running||this.state.loading||this.state.busy||this.state.pending||!this.shot||(!this.baseline&&!this.state.modelFailed)||this.progress.attempts.moveOn||this.progress.attempts.sessionFix)return;
+    if(yaw!==undefined&&(this.state.session.retakePhotoId||this.state.session.details?.active||!sweepActive(this.progress)))return;
+    this.cancelCountdown();const token=this.countdownGeneration;
+    if(yaw!==undefined){const selected=chooseTimedProfile(this.progress,yaw);if(!selected)return;this.progress=selected;}
+    this.state.paused=false;this.hold=null;this.state.countdown=7;this.emit();
+    try{await this.persist();}catch{this.cancelCountdown();this.state.paused=true;this.state.message=s.saveError;this.emit();return;}
+    if(token!==this.countdownGeneration||!this.state.running)return;
+    const began=performance.now();
+    this.countdownTimer=setInterval(()=>{
+      if(token!==this.countdownGeneration||!this.state.running||this.state.paused){this.cancelCountdown();this.emit();return;}
+      const step=handsFreeStep(began,performance.now());
+      if(this.state.countdown!==step.remaining){this.state.countdown=step.remaining;this.emit();}
+      if(step.capture){
+        clearInterval(this.countdownTimer);this.countdownTimer=undefined;
+        void this.capture(true).then(()=>{
+          if(token!==this.countdownGeneration)return;
+          this.state.countdown=null;this.state.handsFreeReturning=true;this.state.paused=true;this.emit();
+        });
+      }
+    },100);
+  }
+  async enableFreeSweep(){if(this.state.busy||this.state.pending||this.state.session.retakePhotoId||this.state.session.details?.active)return;this.progress={...this.progress,freeSweep:true};await this.persist();}
+  async finishFreeSweep(){if(this.state.busy||this.state.pending||this.state.session.retakePhotoId||this.state.session.details?.active)return;this.cancelCountdown();this.hold=null;this.progress=finishSweep(this.progress);await this.persist();}
   async revisit() { this.progress = revisit(this.progress, this.plan); await this.persist(); }
-  pause() { this.state.paused = !this.state.paused; this.hold = null; this.emit(); }
+  pause() { this.cancelCountdown(); this.state.paused = !this.state.paused; this.hold = null; this.emit(); }
   interrupt() { if (!this.state.running && !this.state.loading) return; this.stop(); this.state.message = s.cameraInterrupted; this.emit(); }
-  stop() { this.generation++; clearTimeout(this.timer); this.camera.stop(); this.analysis?.close(); this.analysis = undefined; this.state.running = false; this.hold = null; this.previousPose = null; }
+  stop(preserveCountdown=false) { if(!preserveCountdown)this.cancelCountdown(); this.generation++; clearTimeout(this.timer); this.camera.stop(); this.analysis?.close(); this.analysis = undefined; this.state.running = false; this.hold = null; this.previousPose = null; }
   dispose() { this.disposed = true; this.stop(); this.clearPending(); }
 }

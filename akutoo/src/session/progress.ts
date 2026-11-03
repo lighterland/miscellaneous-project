@@ -1,11 +1,12 @@
+import {sweepActive,nextSweepIndex} from './free-sweep';
 import { shots } from './shotlist';
 import { initialAttempts, nextSlot, recordFailure, resetCause, type Attempts, type Cause } from './attempts';
 export interface Progress {
-  shotlistVersion?: 2 | 3;
+  shotlistVersion?: 2 | 3; freeSweep?:boolean;
   index: number; completed: string[]; missed: string[]; revisiting: boolean; revisitQueue: number[];
   attempts: Attempts; savedIds: string[]; skipped: Record<string, string>;
 }
-export function freshProgress(now: number): Progress { return { shotlistVersion: 3, index: 0, completed: [], missed: [], revisiting: false, revisitQueue: [], attempts: initialAttempts(now), savedIds: [], skipped: {} }; }
+export function freshProgress(now: number): Progress { return { shotlistVersion: 3, freeSweep:true, index: 0, completed: [], missed: [], revisiting: false, revisitQueue: [], attempts: initialAttempts(now), savedIds: [], skipped: {} }; }
 // Legacy sessions stored ordinal indexes for the 26-shot plan. Preserve their
 // current instruction and photo IDs; never silently award the two added bins.
 export function upgradeProgress(p: Progress): Progress {
@@ -28,9 +29,10 @@ export function failSlot(p: Progress, cause: Cause, now: number): Progress { ret
 export function advanceSlot(p: Progress, reason?: string, plan: readonly { id: string }[] = shots): Progress {
   const id = plan[p.index]?.id;
   const queue = p.revisiting ? p.revisitQueue.slice(1) : p.revisitQueue;
-  return { ...p, index: p.revisiting ? queue[0] ?? plan.length : p.index + 1, revisitQueue: queue,
+  const next = { ...p, index: p.revisiting ? queue[0] ?? plan.length : p.index + 1, revisitQueue: queue,
     missed: id && reason ? [...new Set([...p.missed, id])] : p.missed,
     skipped: id && reason ? { ...p.skipped, [id]: reason } : p.skipped, attempts: nextSlot(p.attempts) };
+  return sweepActive(p)&&plan===shots?{...next,index:nextSweepIndex(next)}:next;
 }
 export function acceptSlot(p: Progress, photoId: string, plan: readonly { id: string }[] = shots): Progress {
   const id = plan[p.index]?.id;

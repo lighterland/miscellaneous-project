@@ -24,6 +24,7 @@ export interface Photo {
   thumbPath?: string; source?: 'captured' | 'imported'; shotId?: string; binId?: string;
   fulfilledShotIds?: string[];
   poseConvention?: 'subject-left-negative-v2';
+  captureTrigger?:'manual'|'automatic'|'countdown';
   streamDimensions?: { width: number; height: number };
   hair?:HairPhoto;
   body?:BodyPhoto;

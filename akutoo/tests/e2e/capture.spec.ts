@@ -19,7 +19,7 @@ async function injectAnalysis(page: Page, unavailable = false) {
         if (message.type === 'load') { setTimeout(() => this.onmessage?.({ data: unavailable ? { id: message.id, type: 'error', error: 'fixture unavailable' } : { id: message.id, type: 'ready' } }), 5); return; }
         const width = message.bitmap.width, height = message.bitmap.height; message.bitmap.close();
         const fixture = (window as any).fixture;
-        const result = { measurements: { faceCount: 1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: fixture.faceRatio ?? .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: fixture.pose ?? { yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
+        const result = { measurements: { faceCount: fixture.faceCount??1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: fixture.faceRatio ?? .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: 'pose' in fixture?fixture.pose:{ yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
         setTimeout(() => this.onmessage?.({ data: { id: message.id, type: 'result', result } }), fixture.delay??5);
       }
       terminate() {}
@@ -542,5 +542,78 @@ test('a gentle head sweep collects automatic angles despite small pose jitter an
  }
  await page.evaluate(()=>clearInterval((window as any).sweepTimer));
  expect(await photoInfo(page)).toMatchObject({count:7,override:false});
- await expect(page.getByText('Manual shot / use the shutter',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Left profile · hands-free',exact:true})).toBeVisible();
+});
+
+
+test('free movement collects out-of-order yaw and chin angles without skipping earlier gaps',async({page})=>{
+ await injectAnalysis(page);await openCamera(page);
+ await expect(page.getByText('1 of 28 shots saved')).toBeVisible({timeout:30000});
+ for(const [index,pose] of [{yaw:45,pitch:0,roll:0},{yaw:0,pitch:15,roll:0},{yaw:-30,pitch:0,roll:0},{yaw:75,pitch:0,roll:0}].entries()){
+  await page.evaluate(pose=>{(window as any).fixture.pose=pose;},pose);
+  await expect(page.getByText(`${index+2} of 28 shots saved`)).toBeVisible({timeout:15000});
+ }
+ await expect(page.getByRole('heading',{name:'Free head scan'})).toBeVisible();
+ expect(await photoInfo(page)).toMatchObject({count:5,override:false});
+ await page.getByRole('button',{name:'Continue with collected angles',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Expressions',exact:true})).toBeVisible();
+});
+
+test('hands-free profile countdown can cancel, capture without a shutter, and retain unmeasured results only for explicit review',async({page})=>{
+ test.setTimeout(120000);await injectAnalysis(page);
+ await page.addInitScript(()=>{(window as any).spoken=[];Object.defineProperty(speechSynthesis,'speak',{value:(u:SpeechSynthesisUtterance)=>(window as any).spoken.push(u.text)});});
+ await openCamera(page);await expect(page.getByText('1 of 28 shots saved')).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Left profile · hands-free',exact:true}).click();
+ await expect(page.locator('.handsfree-countdown')).toBeVisible();
+ for(const [name,width,height] of [['mobile',390,844],['desktop',1280,900]] as const){await page.setViewportSize({width,height});await page.screenshot({path:`.impeccable/review/handsfree-${name}.png`,fullPage:true});}
+ await page.getByRole('button',{name:'Pause',exact:true}).click();
+ await expect(page.locator('.handsfree-countdown')).toHaveCount(0);
+ await page.waitForTimeout(8500);expect(await photoInfo(page)).toMatchObject({count:1});
+ await page.getByRole('button',{name:'Resume',exact:true}).click();
+ await page.getByRole('button',{name:'Left profile · hands-free',exact:true}).click();
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:-90,pitch:0,roll:0};});
+ await expect(page.getByText('2 of 28 shots saved')).toBeVisible({timeout:20000});
+ await expect(page.getByText('Face the screen. Check the photo below, or resume the scan if it was saved.',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).spoken.includes('Photo captured. Face the screen to check it.'))).toBe(true);
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:0,pitch:0,roll:0};});
+ await page.getByRole('button',{name:'Resume',exact:true}).click();
+ await page.getByRole('button',{name:'Right profile · hands-free',exact:true}).click();
+ await page.evaluate(()=>{(window as any).fixture.pose=null;(window as any).fixture.faceCount=0;});
+ await expect(page.getByRole('heading',{name:'Check this photo',exact:true})).toBeVisible({timeout:20000});
+ expect(await photoInfo(page)).toMatchObject({count:2});
+ await expect(page.locator('.scan-ring path[data-pose-bin="yaw:90"]')).not.toHaveClass('complete');
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'.impeccable/review/handsfree-review-mobile.png',fullPage:true});
+ await page.setViewportSize({width:1280,height:900});await page.screenshot({path:'.impeccable/review/handsfree-review-desktop.png',fullPage:true});
+});
+
+
+test('leaving the page cancels a hands-free countdown without a late photo',async({page})=>{
+ await injectAnalysis(page);await openCamera(page);
+ await expect(page.getByText('1 of 28 shots saved')).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Left profile · hands-free',exact:true}).click();
+ await expect(page.locator('.handsfree-countdown')).toBeVisible();
+ await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));
+ await expect(page.getByRole('button',{name:'Start camera',exact:true})).toBeEnabled();
+ await page.waitForTimeout(8500);
+ expect(await photoInfo(page)).toMatchObject({count:1});
+ await expect(page.getByRole('heading',{name:'Check this photo',exact:true})).toHaveCount(0);
+});
+
+
+test('the final timed shot still tells the solo user to face the screen after camera shutdown',async({page})=>{
+ await injectAnalysis(page);
+ await page.addInitScript(()=>{(window as any).spoken=[];Object.defineProperty(speechSynthesis,'speak',{value:(u:SpeechSynthesisUtterance)=>(window as any).spoken.push(u.text)});});
+ await openCamera(page);await expect(page.getByText('1 of 28 shots saved')).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Finish for now',exact:true}).click();
+ await page.getByRole('button',{name:'Back to sessions',exact:true}).click();
+ await page.evaluate(async()=>{
+  const database=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('akutoo');r.onsuccess=()=>resolve(r.result);});
+  await new Promise<void>((resolve,reject)=>{const tx=database.transaction('sessions','readwrite'),table=tx.objectStore('sessions'),r=table.getAll();r.onsuccess=()=>{const session=r.result[0];session.progress.index=27;table.put(session);};tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});database.close();
+ });
+ await page.reload();await page.getByRole('button',{name:'Continue session',exact:true}).click();
+ await page.getByRole('button',{name:'Start camera',exact:true}).click();
+ await page.getByRole('button',{name:'Take after countdown',exact:true}).click({timeout:30000});
+ await expect(page.getByRole('heading',{name:'Your scan is saved',exact:true})).toBeVisible({timeout:20000});
+ await expect.poll(()=>page.evaluate(()=>(window as any).spoken.includes('Photo captured. Face the screen to check it.'))).toBe(true);
+ expect(await photoInfo(page)).toMatchObject({count:2});
 });
