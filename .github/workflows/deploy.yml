@@ -65,6 +65,36 @@ jobs:
       - name: Assemble Akutoo
         run: cp -r akutoo-m0/dist _site/akutoo-m0
 
+      - name: Setup Node.js for Akutoo app
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: akutoo/package-lock.json
+
+      - name: Install Akutoo personal app
+        working-directory: akutoo
+        run: npm ci
+
+      - name: Test Akutoo personal app units
+        working-directory: akutoo
+        run: npm test
+
+      - name: Build Akutoo personal app
+        working-directory: akutoo
+        run: npm run build
+
+      - name: Install browser for Akutoo deployment checks
+        working-directory: akutoo
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify Akutoo Pages subpath and offline privacy
+        working-directory: akutoo
+        run: node scripts/verify-pages.mjs
+
+      - name: Assemble Akutoo personal app
+        run: cp -r akutoo/dist _site/akutoo
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
