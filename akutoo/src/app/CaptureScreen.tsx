@@ -82,7 +82,7 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
     catch (error) { if (error instanceof SessionConflict) onLeave(); else setLeaveError(s.saveError); }
   }
   const fixing = !!p?.attempts.sessionFix;
-  const autoReady=!!state?.autoReady&&!busy&&!state.paused&&!state.modelFailed&&!shot?.manual;
+  const autoReady=!!state?.autoReady&&!counting&&!busy&&!state.paused&&!state.modelFailed&&!shot?.manual;
   const autoLabel=counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeCount(state?.countdown??0)):state?.busy?s.autoSaving:state?.loading?s.autoPreparing:state?.modelFailed?s.autoUnavailable:state?.paused?s.autoPaused:shot?.manual?s.autoManual:!baseline?s.autoCalibrating:autoReady?s.autoReady:s.autoAlign;
   const feedback = counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeAway):state?.handsFreeReturning?s.handsFreeReturnHelp:state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || state.quality?.hardFailure) ? state.message : correction??instruction;
   return <main className={fixing ? 'capture-screen fix-screen' : `capture-screen${shot&&!detail&&shot.stage<=2?' has-pose-guide':''}`}>

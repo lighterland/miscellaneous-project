@@ -617,3 +617,24 @@ test('the final timed shot still tells the solo user to face the screen after ca
  await expect.poll(()=>page.evaluate(()=>(window as any).spoken.includes('Photo captured. Face the screen to check it.'))).toBe(true);
  expect(await photoInfo(page)).toMatchObject({count:2});
 });
+
+
+test('starting a countdown cannot inherit green readiness from the previous live pose',async({page})=>{
+ await injectAnalysis(page);await openCamera(page);
+ await page.evaluate(()=>{(window as any).fixture.delay=2000;});
+ // Enter the timer in the same UI update as readiness, before the next analysis tick.
+ await page.evaluate(()=>new Promise<void>((resolve,reject)=>{
+  const observer=new MutationObserver(check);
+  const timeout=setTimeout(()=>{observer.disconnect();reject(new Error('Ready state not reached'));},30000);
+  function check(){
+   if(document.querySelector('.auto-status')?.getAttribute('data-ready')!=='true')return;
+   const button=[...document.querySelectorAll('button')].find(b=>b.textContent?.startsWith('Left profile'));
+   if(!button||button.disabled)return;
+   observer.disconnect();clearTimeout(timeout);button.click();resolve();
+  }
+  observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['data-ready']});check();
+ }));
+ await expect(page.locator('.handsfree-countdown')).toBeVisible();
+ await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
+ await page.getByRole('button',{name:'Pause',exact:true}).click();
+});

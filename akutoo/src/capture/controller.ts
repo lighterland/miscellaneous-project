@@ -45,7 +45,7 @@ export class CaptureController {
     this.state = { session: { ...session, progress: session.progress ? upgradeProgress(session.progress) : freshProgress(Date.now()) }, running: false, loading: false, paused: false, busy: false, modelFailed: false, message: s.scanIntro, seconds: 5, result: null, quality: null, pending: null, camera: session.camera ?? 'user', retakeFinished: false, coveredBins: [],autoReady:false,holdProgress:0,poseCue:null,countdown:null,handsFreeReturning:false };
     void this.refreshCoverage().catch(() => { this.state.message = s.saveError; this.emit(); });
   }
-  private emit() { if(!this.state.running||this.state.paused||this.state.busy||this.state.pending||this.state.modelFailed){this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;} if (!this.disposed) this.changed({ ...this.state }); }
+  private emit() { if(!this.state.running||this.state.paused||this.state.busy||this.state.pending||this.state.modelFailed||this.state.countdown!==null){this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;} if (!this.disposed) this.changed({ ...this.state }); }
   private get plan() { return capturePlan(this.state.session); }
   private get progress() { return captureProgress(this.state.session); }
   private set progress(value) { if (this.state.session.details?.active) this.state.session.details.progress = value; else this.state.session.progress = value; }
