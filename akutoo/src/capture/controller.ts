@@ -1,3 +1,4 @@
+import {poseGuidance, type PoseCue} from './pose-guidance';
 import { AnalysisClient } from '../analysis/client';
 import type { AnalysisResult } from '../analysis/protocol';
 import { expressionMatch } from '../analysis/expressions';
@@ -20,7 +21,7 @@ export interface CaptureState {
   session: Session; running: boolean; loading: boolean; paused: boolean; busy: boolean; modelFailed: boolean;
   message: string; seconds: number; result: AnalysisResult | null; quality: QualityResult | null;
   pending: { photo: Photo; full: Blob; thumb: Blob; url: string } | null; camera: 'user' | 'environment';
-  retakeFinished: boolean; coveredBins: string[]; autoReady:boolean; holdProgress:number;
+  retakeFinished: boolean; coveredBins: string[]; autoReady:boolean; holdProgress:number; poseCue:PoseCue|null;
 }
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export class CaptureController {
@@ -36,10 +37,10 @@ export class CaptureController {
   private disposed = false;
   constructor(private video: HTMLVideoElement, session: Session, private changed: (state: CaptureState) => void, camera?: CameraSource) {
     this.camera = camera ?? new BrowserCamera(video);
-    this.state = { session: { ...session, progress: session.progress ? upgradeProgress(session.progress) : freshProgress(Date.now()) }, running: false, loading: false, paused: false, busy: false, modelFailed: false, message: s.scanIntro, seconds: 5, result: null, quality: null, pending: null, camera: session.camera ?? 'user', retakeFinished: false, coveredBins: [],autoReady:false,holdProgress:0 };
+    this.state = { session: { ...session, progress: session.progress ? upgradeProgress(session.progress) : freshProgress(Date.now()) }, running: false, loading: false, paused: false, busy: false, modelFailed: false, message: s.scanIntro, seconds: 5, result: null, quality: null, pending: null, camera: session.camera ?? 'user', retakeFinished: false, coveredBins: [],autoReady:false,holdProgress:0,poseCue:null };
     void this.refreshCoverage().catch(() => { this.state.message = s.saveError; this.emit(); });
   }
-  private emit() { if(!this.state.running||this.state.paused||this.state.busy||this.state.pending||this.state.modelFailed){this.state.autoReady=false;this.state.holdProgress=0;} if (!this.disposed) this.changed({ ...this.state }); }
+  private emit() { if(!this.state.running||this.state.paused||this.state.busy||this.state.pending||this.state.modelFailed){this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;} if (!this.disposed) this.changed({ ...this.state }); }
   private get plan() { return capturePlan(this.state.session); }
   private get progress() { return captureProgress(this.state.session); }
   private set progress(value) { if (this.state.session.details?.active) this.state.session.details.progress = value; else this.state.session.progress = value; }
@@ -90,7 +91,7 @@ export class CaptureController {
     if (generation !== this.generation) return;
     if (this.state.paused || this.state.busy || this.state.pending || !this.analysis || !this.shot) { this.schedule(generation); return; }
     try {
-      this.state.autoReady=false;this.state.holdProgress=0;
+      this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
       const result = await this.measure(this.video);
       if (generation !== this.generation) return;
       this.state.result = result;
@@ -112,6 +113,7 @@ export class CaptureController {
         this.previousPose = pose ? { ...pose, time: now } : null;
         const near = pose && Math.abs(pose.yaw - this.shot.yaw) <= 7 && Math.abs(pose.pitch - this.shot.pitch) <= 7;
         const ready = !quality.hardFailure && quality.tier !== 'D' && !!near && velocity < 8 && m.faceRatio >= .35 && expressionMatch(result.blendshapes, this.shot.expression) >= .8 && !this.shot.manual;
+        this.state.poseCue=poseGuidance({shot:this.shot,pose,quality,faceRatio:m.faceRatio,expression:expressionMatch(result.blendshapes,this.shot.expression),velocity,ready});
         this.hold = startHold(this.hold, ready, now);
         this.state.autoReady=ready;this.state.holdProgress=this.hold===null?0:Math.min(1,(now-this.hold)/500);
         this.state.message = quality.reason ? s.fix[quality.reason] : ready ? s.holdStill : s.shotInstruction(this.shot);
@@ -209,7 +211,7 @@ export class CaptureController {
     if (result.saved) { this.state.session.stats = { ...stats, captures: stats.captures + 1 }; await this.persist(); }
     this.state.message = result.saved ? s.photoSaved : result.outcome === 'kept-retake' ? s.earlierKept : '';
     this.state.retakeFinished = wasRetake;
-    this.clearPending(); this.previousPose = null;this.state.autoReady=false;this.state.holdProgress=0;
+    this.clearPending(); this.previousPose = null;this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
     if (photo.detail) { this.baseline = undefined; this.calibration = { began: null, values: [] }; this.state.seconds = 5; this.state.quality = null; }
     if (!this.shot) { this.stop(); this.state.session.status = 'review'; await this.persist(); }
     this.emit();

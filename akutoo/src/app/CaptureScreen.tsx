@@ -1,3 +1,5 @@
+import {PoseGuide} from './PoseGuide';
+import {speechDelay} from '../capture/pose-guidance';
 import {speakGuidance} from '../audio/guidance';
 import { useEffect, useRef, useState } from 'react';
 import { CaptureController, type CaptureState } from '../capture/controller';
@@ -34,11 +36,21 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
   const guide = shot?.detail ? detailGuide(shot.detail) : null;
   const sourceRatio = (state?.session.stream?.width ?? 3) / (state?.session.stream?.height ?? 4);
   const instruction = shot ? s.shotInstruction(shot) : s.sessionComplete;
+  const lastSpoken=useRef(-Infinity), lastShot=useRef('');
+  const correction=state?.poseCue && state.poseCue!=='manual' ? state.poseCue==='expression' ? instruction : state.poseCue in s.fix ? s.fix[state.poseCue as keyof typeof s.fix] : s.poseCues[state.poseCue as keyof typeof s.poseCues] : null;
+  const spoken=baseline&&correction?correction:instruction;
   useEffect(() => {
-    if (!voice || !state?.running || !('speechSynthesis' in window)) return;
-    speakGuidance(instruction,voiceURI);
-    return () => speechSynthesis.cancel();
-  }, [instruction, voice, voiceURI,state?.running]);
+    if(!voice||!state?.running||state.paused||state.busy||state.pending||state.loading||state.modelFailed||!('speechSynthesis' in window)) {
+      if('speechSynthesis' in window) speechSynthesis.cancel();
+      return;
+    }
+    const changed=lastShot.current!==shot?.id;
+    const timer=window.setTimeout(()=>{
+      speakGuidance(changed&&spoken!==instruction?`${instruction} ${spoken}`:spoken,voiceURI);
+      lastSpoken.current=performance.now();lastShot.current=shot?.id??'';
+    },changed?350:speechDelay(performance.now(),lastSpoken.current));
+    return ()=>window.clearTimeout(timer);
+  },[spoken,instruction,shot?.id,voice,voiceURI,state?.running,state?.paused,state?.busy,state?.pending,state?.loading,state?.modelFailed]);
   const busy = state?.busy || state?.loading;
   async function leave() {
     if (busy) return;
@@ -49,8 +61,8 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
   const fixing = !!p?.attempts.sessionFix;
   const autoReady=!!state?.autoReady&&!busy&&!state.paused&&!state.modelFailed&&!shot?.manual;
   const autoLabel=state?.busy?s.autoSaving:state?.loading?s.autoPreparing:state?.modelFailed?s.autoUnavailable:state?.paused?s.autoPaused:shot?.manual?s.autoManual:!baseline?s.autoCalibrating:autoReady?s.autoReady:s.autoAlign;
-  const feedback = state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || state.quality?.hardFailure) ? state.message : instruction;
-  return <main className={fixing ? 'capture-screen fix-screen' : 'capture-screen'}>
+  const feedback = state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || state.quality?.hardFailure) ? state.message : correction??instruction;
+  return <main className={fixing ? 'capture-screen fix-screen' : `capture-screen${shot&&!detail&&shot.stage<=2?' has-pose-guide':''}`}>
     <div className={fixing ? 'scan-layout is-hidden' : 'scan-layout'} inert={fixing}>
     <header className="capture-header"><button className="quiet" onClick={() => void leave()} disabled={!!busy}>{s.finish}</button><span>{p ? s.progress(p.completed.length, plan.length) : s.setupTitle}</span></header>
     <div className="capture-heading">{!detail && <p>{shot ? s.stage(shot.stage) : s.sessionComplete}</p>}<h1>{shot ? s.stageNames[shot.stage - 1] : s.sessionComplete}</h1></div>
@@ -65,6 +77,7 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
     </div>
     <section className="capture-controls">
       {state?.running&&!state.pending&&<div className={autoReady?'auto-status is-ready':'auto-status'} data-ready={autoReady?'true':'false'}><p role="status">{autoLabel}</p>{!shot?.manual&&!state.modelFailed&&baseline&&<div role="progressbar" aria-label={s.autoHoldProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((state.holdProgress??0)*100)} className="auto-hold"><span style={{width:`${Math.round((state.holdProgress??0)*100)}%`}}/></div>}</div>}
+      {shot&&!detail&&shot.stage<=2&&<PoseGuide shot={shot} pose={state?.running&&!state.paused?state.result?.pose??null:null} mirror={state?.camera==='user'}/>}
       {detail && shot && <p className="instruction">{instruction}</p>}
       {(!detail || feedback !== instruction) && <p className={detail ? 'capture-note' : 'instruction'} aria-live="polite">{feedback}</p>}
       {detail && <details className="detail-tips"><summary>{s.detailPhotoTips}</summary><p className="capture-note">{s.detailHelp}</p></details>}

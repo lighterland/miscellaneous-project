@@ -298,3 +298,11 @@ select { min-height: 48px; border-radius: 12px; border: 1px solid #857a9c; color
 .auto-status p { margin:0;font-weight:700; }.auto-status.is-ready { background:#b9efc6;border-color:#b9efc6;color:#123b23; }
 .auto-hold { height:5px;margin-top:10px;background:#524561;border-radius:4px;overflow:hidden; }.auto-hold span { display:block;height:100%;background:currentColor; }.is-ready .auto-hold { background:#7db88c; }
 .guidance-voice { padding:20px 0;border-bottom:1px solid #ddd7ee; }.guidance-voice select { flex:initial;width:100%;max-width:100%;min-width:0;color:#14101f;background:#fff; }.guidance-voice p { max-width:65ch; }
+
+.pose-guide { display:flex;align-items:center;gap:14px;text-align:left;margin:0 0 16px;padding:0 0 14px;border-bottom:1px solid #51465f; }
+.pose-guide svg { width:82px;height:96px;flex:none;color:#f4f1fb; }
+.pose-guide strong { font-size:14px; }.pose-guide p { margin:4px 0 7px;font-size:16px;line-height:1.35; }
+.pose-guide small { display:block;color:#c9bfdc;font-size:12px;line-height:1.45; }
+.pose-guide small:last-child { font-variant-numeric:tabular-nums; }
+
+.has-pose-guide .camera-frame { height:clamp(160px,calc(100svh - 650px),360px); }

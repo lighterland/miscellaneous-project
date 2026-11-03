@@ -19,7 +19,7 @@ async function injectAnalysis(page: Page, unavailable = false) {
         if (message.type === 'load') { setTimeout(() => this.onmessage?.({ data: unavailable ? { id: message.id, type: 'error', error: 'fixture unavailable' } : { id: message.id, type: 'ready' } }), 5); return; }
         const width = message.bitmap.width, height = message.bitmap.height; message.bitmap.close();
         const fixture = (window as any).fixture;
-        const result = { measurements: { faceCount: 1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: fixture.pose ?? { yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
+        const result = { measurements: { faceCount: 1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: fixture.faceRatio ?? .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: fixture.pose ?? { yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
         setTimeout(() => this.onmessage?.({ data: { id: message.id, type: 'result', result } }), fixture.delay??5);
       }
       terminate() {}
@@ -497,4 +497,34 @@ test('green readiness follows the real auto trigger and saves without a shutter 
  await page.evaluate(()=>{(window as any).fixture.delay=5;});await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:20000}).toBe(1);
  await page.getByRole('button',{name:'Pause',exact:true}).click();await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');await expect(page.getByText('Auto capture paused',{exact:true})).toBeVisible();
  for(const [suffix,width,height]of [['mobile',390,844],['desktop',1280,900]]as const){await page.setViewportSize({width,height});await page.screenshot({path:`.impeccable/review/auto-paused-${suffix}.png`,fullPage:true});}
+});
+
+
+test('live pose guidance corrects undershoot and overshoot before automatic capture', async ({ page }) => {
+  await injectAnalysis(page);
+  await page.addInitScript(()=>{ (window as any).spoken=[]; Object.defineProperty(speechSynthesis,'speak',{value:(utterance:SpeechSynthesisUtterance)=>(window as any).spoken.push(utterance.text)}); });
+  await openCamera(page);
+  await expect(page.getByText('1 of 28 shots saved')).toBeVisible({ timeout:30000 });
+  await expect(page.getByText('Turn a little to your left.', {exact:true})).toBeVisible();
+  await expect(page.getByRole('img', {name:'Target head direction: your left, 15 degrees'})).toBeVisible();
+  await page.getByRole('button',{name:'Voice off',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).spoken.some((text:string)=>text.includes('Turn a little to your left.')))).toBe(true);
+  for(const [name,width,height] of [['mobile',390,844],['desktop',1280,900]] as const) {
+    await page.setViewportSize({width,height});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    await page.screenshot({path:`.impeccable/review/pose-${name}.png`,fullPage:true});
+  }
+  await page.evaluate(() => { (window as any).fixture.pose={yaw:-30,pitch:0,roll:0}; });
+  await expect(page.getByText('Turn a little to your right.', {exact:true})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).spoken.some((text:string)=>text.includes('Turn a little to your right.'))),{timeout:6000}).toBe(true);
+  const spokenCount=await page.evaluate(()=>(window as any).spoken.length);
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(()=>(window as any).spoken.length)).toBe(spokenCount);
+  await page.evaluate(()=>{(window as any).fixture.faceRatio=.2;});
+  await expect(page.getByText('Move a little closer, keeping your whole head visible.',{exact:true})).toBeVisible();
+  await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
+  await page.evaluate(()=>{(window as any).fixture.faceRatio=.5;});
+  await page.evaluate(() => { (window as any).fixture.pose={yaw:-15,pitch:0,roll:0}; });
+  await expect(page.getByText('2 of 28 shots saved')).toBeVisible({timeout:15000});
+  expect(await photoInfo(page)).toMatchObject({count:2,override:false});
 });
