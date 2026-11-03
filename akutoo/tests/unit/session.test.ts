@@ -23,7 +23,7 @@ describe('guided session progression', () => {
     const afterRevisit = upgradeProgress({ ...old, revisiting: true });
     expect(afterRevisit.revisitQueue.map(index => shots[index].id)).toEqual(['turn--75','turn-75']);
     expect(shots[afterRevisit.index].id).toBe('turn--75');
-    expect(upgradeProgress({ ...old, index: 2 }).missed).toEqual([]);
+    expect(upgradeProgress({ ...old, index: 2 }).missed).toEqual(['turn--30','turn--45']);
   });
   it('moves past a failed slot after three tries and offers only one revisit', () => {
     let p = freshProgress(0);
@@ -60,4 +60,14 @@ describe('guided session progression', () => {
     expect(readyToCapture(1000, 1500, 1000)).toBe(false);
     expect(startHold(1000, false, 1500)).toBeNull();
   });
+});
+
+it('keeps each automatic head turn in one direction before crossing to the other side',()=>{
+ expect(shots.slice(0,7).map(s=>s.yaw)).toEqual([0,-15,-30,-45,15,30,45]);
+});
+it('resumes a version-2 shot by ID without losing photos or earlier newly reordered gaps',()=>{
+ const old={...freshProgress(0),shotlistVersion:2 as const,index:2,savedIds:['old-photo'],completed:['turn-0','turn--15']};
+ const next=upgradeProgress(old);
+ expect(shots[next.index].id).toBe('turn-15');expect(next.savedIds).toEqual(['old-photo']);
+ expect(next.missed).toContain('turn--30');expect(next.missed).toContain('turn--45');
 });

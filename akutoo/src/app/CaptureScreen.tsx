@@ -73,22 +73,24 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
         const a = segment / poseBins.length * Math.PI * 2 - Math.PI / 2, b = (segment + .78) / poseBins.length * Math.PI * 2 - Math.PI / 2;
         return <path key={bin} data-pose-bin={bin} d={`M ${150 + 120 * Math.cos(a)} ${200 + 170 * Math.sin(a)} A 120 170 0 0 1 ${150 + 120 * Math.cos(b)} ${200 + 170 * Math.sin(b)}`} className={complete ? 'complete' : ''} />;
       })}</svg>}
+      {shot&&!detail&&shot.stage<=2&&<PoseGuide shot={shot} pose={state?.running&&!state.paused?state.result?.pose??null:null} ready={autoReady} mirror={state?.camera==='user'}/>}
       {!state?.running && <div className="camera-placeholder"><p>{s.scanIntro}</p></div>}
     </div>
     <section className="capture-controls">
       {state?.running&&!state.pending&&<div className={autoReady?'auto-status is-ready':'auto-status'} data-ready={autoReady?'true':'false'}><p role="status">{autoLabel}</p>{!shot?.manual&&!state.modelFailed&&baseline&&<div role="progressbar" aria-label={s.autoHoldProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((state.holdProgress??0)*100)} className="auto-hold"><span style={{width:`${Math.round((state.holdProgress??0)*100)}%`}}/></div>}</div>}
-      {shot&&!detail&&shot.stage<=2&&<PoseGuide shot={shot} pose={state?.running&&!state.paused?state.result?.pose??null:null} mirror={state?.camera==='user'}/>}
       {detail && shot && <p className="instruction">{instruction}</p>}
       {(!detail || feedback !== instruction) && <p className={detail ? 'capture-note' : 'instruction'} aria-live="polite">{feedback}</p>}
       {detail && <details className="detail-tips"><summary>{s.detailPhotoTips}</summary><p className="capture-note">{s.detailHelp}</p></details>}
       {state?.running && !state.pending && !baseline && !state.modelFailed && <p role="status">{s.calibrationTime(state.seconds)}</p>}
-      <p className="capture-note">{s.reviewNeeded}</p>
+      {shot&&!shot.manual&&!detail&&shot.stage<=2&&<p className="capture-note">{s.poseFollow}</p>}
       {!state?.running && shot && <><label className="field">{s.camera}<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)} disabled={!!busy}><option value="user">{s.front}</option><option value="environment">{s.rear}</option></select></label><button className="primary" disabled={!!busy} onClick={() => void controller.current?.start(camera)}>{state?.loading ? s.cameraLoading : s.startCamera}</button></>}
       {state?.running && <>
         <div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!busy}>{state.paused ? s.resume : s.pause}</button><button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending}><span /></button><button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>
+        <p className="capture-note">{s.reviewNeeded}</p>
         {busy && <p role="status">{s.saving}</p>}
         {shot?.manual && <p>{s.manualHint}</p>}
-        {!state.pending && !p?.attempts.sessionFix && <div className="skip-controls"><label className="field">{s.skipReason}<select value={reason} onChange={event => setReason(event.target.value)}>{Object.entries(s.skipOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button className="quiet" disabled={!!busy} onClick={() => void controller.current?.skip(reason)}>{s.skip}</button></div>}
+        {shot&&!shot.manual&&<p className="capture-note">{s.poseFallback}</p>}
+        {!state.pending && !p?.attempts.sessionFix && <div className="skip-controls"><label className="field">{s.skipReason}<select value={reason} onChange={event => setReason(event.target.value)}>{Object.entries(s.skipOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button className="quiet" disabled={!!busy} onClick={() => void controller.current?.skip(reason)}>{s.nextPose}</button></div>}
       </>}
       {state?.pending && <section className="pending-photo"><h2>{s.pendingTitle}</h2><img src={state.pending.url} alt={s.pendingTitle}/><p>{state.message}</p><p>{s.pendingHelp}</p><button className="primary" disabled={!!busy} onClick={() => void controller.current?.keepAnyway()}>{s.keepAnyway}</button><button className="quiet" disabled={!!busy} onClick={() => void controller.current?.retryCapture()}>{p?.attempts.promptRetake === false || p?.attempts.moveOn ? s.skip : s.discard}</button></section>}
       {!shot && state && <section><p>{s.sessionCompleteHelp}</p>{p && !p.revisiting && p.missed.length > 0 && <button className="primary" onClick={() => void controller.current?.revisit()}>{s.revisit}</button>}<button className="quiet" onClick={() => void leave()}>{s.review}</button></section>}

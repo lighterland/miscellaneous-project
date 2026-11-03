@@ -10,6 +10,8 @@ export function laplacianVariance(gray: ArrayLike<number>, width: number, height
 }
 
 // Column-major Rz(roll) * Ry(yaw) * Rx(pitch), after removing column scale.
+// Canonical nose points +Z: positive matrix yaw projects image-right (subject left).
+// App convention: negative yaw is subject left, independently of preview mirroring.
 export function poseFromMatrix(matrix: ArrayLike<number>) {
   if (matrix.length !== 16 || Array.from(matrix).some(v => !Number.isFinite(v))) throw new Error('Invalid pose matrix');
   const scale = [0, 4, 8].map(i => Math.hypot(matrix[i], matrix[i + 1], matrix[i + 2]));
@@ -19,7 +21,7 @@ export function poseFromMatrix(matrix: ArrayLike<number>) {
   const locked = Math.abs(Math.cos(yaw)) < 1e-6;
   const pitch = locked ? Math.atan2(-at(1, 2), at(1, 1)) : Math.atan2(at(2, 1), at(2, 2));
   const roll = locked ? 0 : Math.atan2(at(1, 0), at(0, 0));
-  return { yaw: yaw * 180 / Math.PI, pitch: pitch * 180 / Math.PI, roll: roll * 180 / Math.PI };
+  return { yaw: -yaw * 180 / Math.PI, pitch: pitch * 180 / Math.PI, roll: roll * 180 / Math.PI };
 }
 
 export function faceCrop(points: readonly { x: number; y: number }[], width: number, height: number) {

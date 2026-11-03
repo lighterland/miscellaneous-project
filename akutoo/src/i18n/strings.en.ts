@@ -13,7 +13,7 @@ const detailInstructions: Record<string, string> = {
 export const s = {
   guidanceVoice:'Guidance voice',voiceAutomatic:'Automatic / prefer a female voice',voiceDevice:'On device',voiceNetwork:'May need internet',voiceChoiceHelp:'Choose the voice you find most natural. Automatic favors recognizable female voice names. Availability and offline speech depend on this device.',voicePreview:'Listen to voice',voiceSelected:(name:string)=>`Current voice: ${name}`,voiceSystem:'System default',
   poseCues: {left:'Turn a little to your left.',right:'Turn a little to your right.',up:'Raise your chin a little.',down:'Lower your chin a little.',closer:'Move a little closer, keeping your whole head visible.',steady:'That angle is close. Hold your head and phone still.',ready:'Hold still. Taking your photo automatically.',tracking:'Face the camera until your head direction is detected.',quality:'Hold still in soft, even light. The quality check is still waiting.'},
-  poseTarget:'Match this head direction', poseMirror:'Mirror view · use your own left and right', poseCameraView:'Camera view · use your own left and right',
+  nextPose:'Next pose',poseFollow:'Move the dot to the ring. Pause until green.',poseFallback:'You can also tap the shutter, or skip this pose and return later.',poseTarget:'Match this head direction', poseMirror:'Mirror view · use your own left and right', poseCameraView:'Camera view · use your own left and right',
   poseTargetName:(yaw:number,pitch:number)=>`Target head direction: ${pitch ? pitch<0?'chin up':'chin down' : yaw<0?'your left':yaw>0?'your right':'straight ahead'}${yaw||pitch?`, ${Math.abs(yaw||pitch)} degrees`:''}`,
   poseLive:(yaw:number,pitch:number)=>`Now: ${Math.round(Math.abs(yaw))===0?'straight ahead':`${Math.round(Math.abs(yaw))}° ${yaw<0?'left':'right'}`} · ${Math.round(Math.abs(pitch))===0?'chin level':`chin ${Math.round(Math.abs(pitch))}° ${pitch<0?'up':'down'}`}`,
   poseWaiting:'Head direction not detected yet',
@@ -102,7 +102,7 @@ export const s = {
     if (shot.context) return ({ 'side-light': 'Move so soft light comes from the side, then take a photo.', 'new-background': 'Choose a different background, then take a photo.', 'new-outfit': 'Change an outer layer or outfit, then take a photo.' })[shot.context];
     if (shot.stage === 3) return ({ neutral: 'Relax your face.', 'closed-smile': 'Smile with your lips closed.', 'toothy-smile': 'Smile and show your teeth.', laugh: 'Give a natural laugh.', surprise: 'Raise your eyebrows and open your mouth.', smirk: 'Smile on one side.' })[shot.expression];
     if (shot.pitch) return shot.pitch < 0 ? 'Raise your chin a little.' : 'Lower your chin a little.';
-    return shot.yaw === 0 ? 'Look straight ahead.' : shot.yaw < 0 ? `Turn slowly to your left, about ${Math.abs(shot.yaw)}°.` : `Turn slowly to your right, about ${shot.yaw}°.`;
+    return shot.yaw === 0 ? 'Look straight ahead.' : `${shot.yaw < 0 ? 'Turn slowly to your left.' : 'Turn slowly to your right.'} ${shot.manual ? 'Use the shutter when positioned.' : 'Pause when green.'}`;
   },
   manualHint: 'Use the shutter for this shot. Actual pose is recorded only when detected.',
   holdStill: 'Hold still. Getting your photo…', photoSaved: 'Photo saved on this device.',

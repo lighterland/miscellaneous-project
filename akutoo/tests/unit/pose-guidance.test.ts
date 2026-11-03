@@ -7,12 +7,12 @@ const cue=(yaw:number,pitch=0,extra={})=>poseGuidance({shot:target,pose:{yaw,pit
 describe('actionable pose feedback without changing capture acceptance',()=>{
  it('corrects undershoot, overshoot and target changes using subject directions',()=>{
   expect(cue(0)).toBe('left');expect(cue(-30)).toBe('right');
-  expect(cue(0,0,{shot:shots[2]})).toBe('right');
+  expect(cue(0,0,{shot:shots.find(s=>s.id==='turn-15')!})).toBe('right');
  });
  it('corrects pitch, then describes the remaining auto blockers',()=>{
   expect(cue(-15,20)).toBe('up');expect(cue(-15,-20)).toBe('down');
-  expect(cue(-15,0,{faceRatio:.2})).toBe('closer');
-  expect(cue(-15,0,{expression:.5})).toBe('expression');
+  expect(cue(-15,0,{faceRatio:.2})).toBe('steady');
+  expect(cue(-15,0,{expression:.5})).toBe('steady');
   expect(cue(-15,0,{velocity:20})).toBe('steady');
   expect(cue(-15,0,{ready:true})).toBe('ready');
  });

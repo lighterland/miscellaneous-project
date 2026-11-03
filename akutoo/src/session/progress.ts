@@ -1,24 +1,29 @@
 import { shots } from './shotlist';
 import { initialAttempts, nextSlot, recordFailure, resetCause, type Attempts, type Cause } from './attempts';
 export interface Progress {
-  shotlistVersion?: 2;
+  shotlistVersion?: 2 | 3;
   index: number; completed: string[]; missed: string[]; revisiting: boolean; revisitQueue: number[];
   attempts: Attempts; savedIds: string[]; skipped: Record<string, string>;
 }
-export function freshProgress(now: number): Progress { return { shotlistVersion: 2, index: 0, completed: [], missed: [], revisiting: false, revisitQueue: [], attempts: initialAttempts(now), savedIds: [], skipped: {} }; }
+export function freshProgress(now: number): Progress { return { shotlistVersion: 3, index: 0, completed: [], missed: [], revisiting: false, revisitQueue: [], attempts: initialAttempts(now), savedIds: [], skipped: {} }; }
 // Legacy sessions stored ordinal indexes for the 26-shot plan. Preserve their
 // current instruction and photo IDs; never silently award the two added bins.
 export function upgradeProgress(p: Progress): Progress {
-  if (p.shotlistVersion === 2) return p;
-  const added = ['turn--75', 'turn-75'];
-  const legacy = shots.filter(shot => !added.includes(shot.id));
-  const mapped = (index: number) => { const id = legacy[index]?.id; return id ? shots.findIndex(shot => shot.id === id) : shots.length; };
-  const needsAdded = p.index >= 9 || p.revisiting;
-  const queue = p.revisitQueue.map(mapped).filter(index => index < shots.length);
-  if (p.revisiting) queue.push(...added.map(id => shots.findIndex(shot => shot.id === id)));
-  return { ...p, shotlistVersion: 2, index: p.revisiting ? queue[0] ?? shots.length : mapped(p.index), revisitQueue: queue,
-    missed: needsAdded ? [...new Set([...p.missed, ...added])] : p.missed };
+  if (p.shotlistVersion === 3) return p;
+  const oldYaw=[0,-15,15,-30,30,-45,45,-60,60,-75,75,-90,90];
+  const version2=[...oldYaw.map(yaw=>shots.find(shot=>shot.id===`turn-${yaw}`)!),...shots.filter(shot=>shot.stage!==1)];
+  const added=['turn--75','turn-75'];
+  const legacy=p.shotlistVersion===2?version2:version2.filter(shot=>!added.includes(shot.id));
+  const mapped=(index:number)=>{const id=legacy[index]?.id;return id?shots.findIndex(shot=>shot.id===id):shots.length;};
+  const queue=p.revisitQueue.map(mapped).filter(index=>index<shots.length);
+  const index=p.revisiting?queue[0]??shots.length:mapped(p.index);
+  const gaps=shots.slice(0,index).filter(shot=>!p.completed.includes(shot.id)&&!legacy.slice(0,p.index).some(old=>old.id===shot.id)).map(shot=>shot.id);
+  const needsAdded=p.shotlistVersion!==2&&(p.index>=9||p.revisiting);
+  if(p.revisiting&&needsAdded)queue.push(...added.map(id=>shots.findIndex(shot=>shot.id===id)));
+  return {...p,shotlistVersion:3,index:p.revisiting?queue[0]??shots.length:index,revisitQueue:queue,
+    missed:[...new Set([...p.missed,...gaps,...(needsAdded?added:[])])]};
 }
+
 export function failSlot(p: Progress, cause: Cause, now: number): Progress { return { ...p, attempts: recordFailure(p.attempts, cause, now) }; }
 export function advanceSlot(p: Progress, reason?: string, plan: readonly { id: string }[] = shots): Progress {
   const id = plan[p.index]?.id;

@@ -9,13 +9,15 @@ export function poseGuidance(input: {shot:Shot;pose:AnalysisResult['pose'];quali
   if(shot.manual) return 'manual';
   if(quality.hardFailure) return quality.reason??'invalid';
   if(!pose || !Number.isFinite(pose.yaw) || !Number.isFinite(pose.pitch)) return 'tracking';
-  if(faceRatio<.35) return 'closer';
+  if(ready) return 'ready';
+  const turn=shot.stage<=2&&!shot.detail;
+  if(!turn&&faceRatio<.35) return 'closer';
   const yaw=shot.yaw-pose.yaw,pitch=shot.pitch-pose.pitch;
   if(Math.abs(yaw)>7) return yaw<0?'left':'right';
   if(Math.abs(pitch)>7) return pitch<0?'up':'down';
-  if(expression<.8) return 'expression';
+  if(!turn&&expression<.8) return 'expression';
   if(quality.tier==='D') return 'quality';
-  if(velocity>=8) return 'steady';
+  if(!turn&&velocity>=8) return 'steady';
   return ready?'ready':'steady';
 }
 // Let a correction settle and leave enough time to hear the preceding cue.

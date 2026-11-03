@@ -39,3 +39,7 @@ it('preserves shared instruction fulfillment until its last supporting photo is 
   expect(next.savedIds).toEqual(['other']); expect(next.completed).toEqual(['turn-0']); expect(next.missed).toEqual(['expression-neutral']);
   expect(progress.completed).toEqual(['turn-0','expression-neutral']);
 });
+
+it('does not reuse legacy opposite-yaw evidence for the corrected pose convention',()=>{
+ expect(captureDecision({...photo('new'),poseConvention:'subject-left-negative-v2'},[photo('old')])).toEqual({action:'keep'});
+});

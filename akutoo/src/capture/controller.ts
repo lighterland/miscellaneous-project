@@ -1,3 +1,4 @@
+import {autoCaptureReady} from './auto-ready';
 import {poseGuidance, type PoseCue} from './pose-guidance';
 import { AnalysisClient } from '../analysis/client';
 import type { AnalysisResult } from '../analysis/protocol';
@@ -111,8 +112,7 @@ export class CaptureController {
         const pose = result.pose;
         const velocity = pose && this.previousPose ? Math.hypot(pose.yaw - this.previousPose.yaw, pose.pitch - this.previousPose.pitch) * 1000 / Math.max(1, now - this.previousPose.time) : Infinity;
         this.previousPose = pose ? { ...pose, time: now } : null;
-        const near = pose && Math.abs(pose.yaw - this.shot.yaw) <= 7 && Math.abs(pose.pitch - this.shot.pitch) <= 7;
-        const ready = !quality.hardFailure && quality.tier !== 'D' && !!near && velocity < 8 && m.faceRatio >= .35 && expressionMatch(result.blendshapes, this.shot.expression) >= .8 && !this.shot.manual;
+        const ready = autoCaptureReady({shot:this.shot,pose,quality,velocity,faceRatio:m.faceRatio,expression:expressionMatch(result.blendshapes,this.shot.expression)});
         this.state.poseCue=poseGuidance({shot:this.shot,pose,quality,faceRatio:m.faceRatio,expression:expressionMatch(result.blendshapes,this.shot.expression),velocity,ready});
         this.hold = startHold(this.hold, ready, now);
         this.state.autoReady=ready;this.state.holdProgress=this.hold===null?0:Math.min(1,(now-this.hold)/500);
@@ -177,7 +177,7 @@ export class CaptureController {
       interrupted();
       const id = crypto.randomUUID();
       const photo: Photo = { id, sessionId: this.state.session.id, opfsPath: `sessions/${this.state.session.id}/${id}.jpg`, thumbPath: `thumbs/${id}.jpg`, width: best.canvas.width, height: best.canvas.height, createdAt: Date.now(), source: 'captured', shotId: shot.id,
-        binId: !shot.detail && best.result?.pose ? poseBin(best.result.pose.yaw, best.result.pose.pitch) : undefined, pose: best.result?.pose ?? null, quality: best.quality, measurements: best.result ? this.metrics(best.result) ?? undefined : undefined, hash: shot.detail ? null : best.result?.hash ?? null, camera: this.state.camera, method, override: false,
+        binId: !shot.detail && best.result?.pose ? poseBin(best.result.pose.yaw, best.result.pose.pitch) : undefined, pose: best.result?.pose ?? null, poseConvention: best.result?.pose ? 'subject-left-negative-v2' : undefined, quality: best.quality, measurements: best.result ? this.metrics(best.result) ?? undefined : undefined, hash: shot.detail ? null : best.result?.hash ?? null, camera: this.state.camera, method, override: false,
         streamDimensions: this.state.session.stream ? { ...this.state.session.stream } : undefined, requestedYaw: shot.detail ? undefined : shot.yaw, requestedPitch: shot.detail ? undefined : shot.pitch, expression: shot.expression, direction: shot.direction, context: shot.context, relaxed: this.progress.attempts.relaxed,
         bestAttempt: this.progress.attempts.slotAttempts >= 2 && best.quality.tier === 'C', baseline: this.baseline ? { ...this.baseline } : undefined, ratios: shot.detail ? null : best.result?.ratios ?? null,
         ...(shot.detail ? { detail: { instruction: shot.detail, target: best.result?.target ?? null, faceMeasurements: best.result?.measurements ?? null, reviewed: false } } : {}) };

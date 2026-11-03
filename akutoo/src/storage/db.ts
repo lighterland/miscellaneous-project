@@ -23,6 +23,7 @@ export interface Photo {
   id: string; sessionId: string; opfsPath: string; width: number; height: number; createdAt: number;
   thumbPath?: string; source?: 'captured' | 'imported'; shotId?: string; binId?: string;
   fulfilledShotIds?: string[];
+  poseConvention?: 'subject-left-negative-v2';
   streamDimensions?: { width: number; height: number };
   hair?:HairPhoto;
   body?:BodyPhoto;

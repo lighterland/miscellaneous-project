@@ -154,7 +154,7 @@ test('legacy progress keeps its photo and target; an exhausted retry budget offe
     }); database.close();
   });
   await page.reload(); await page.getByRole('button', { name: 'Continue session', exact: true }).click();
-  await expect(page.getByText('Turn slowly to your left, about 90°.', { exact: true })).toBeVisible();
+  await expect(page.locator('.pose-guide').getByText('Turn slowly to your left. Use the shutter when positioned.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start camera', exact: true }).click();
   // No new calibration yet: this manual attempt must remain an explicit failure.
   await page.getByRole('button', { name: 'Take photo', exact: true }).click();
@@ -164,7 +164,7 @@ test('legacy progress keeps its photo and target; an exhausted retry budget offe
   await page.screenshot({ path: '.impeccable/review/retry-budget-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: '.impeccable/review/retry-budget-mobile.png', fullPage: true });
   await expect(page.getByText('The retry limit is reached. Keep this photo only if useful, or skip this shot.', { exact: true })).toHaveCount(2);
-  await page.getByRole('button', { name: 'Skip this shot', exact: true }).click();
+  await page.getByRole('button', { name: /^(Skip this shot|Next pose)$/, exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Check this photo', exact: true })).toHaveCount(0);
   expect(await photoInfo(page)).toMatchObject({ id: original!.id, count: 1 });
 });
@@ -221,7 +221,7 @@ test('calibrated auto-capture is saved locally; three matching failures show Ses
   }
   await expect(page.getByRole('heading', { name: 'Let’s fix this once' })).toBeVisible();
   await page.screenshot({ path: '.impeccable/review/session-fix-mobile.png', fullPage: true });
-  await page.getByRole('button', { name: 'Skip this shot', exact: true }).click();
+  await page.getByRole('button', { name: /^(Skip this shot|Next pose)$/, exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Let’s fix this once' })).toHaveCount(0);
   expect(await page.locator('video').evaluate(video => !!(video as HTMLVideoElement).srcObject)).toBe(true);
   await page.getByRole('button', { name: 'Finish for now' }).click();
@@ -521,10 +521,26 @@ test('live pose guidance corrects undershoot and overshoot before automatic capt
   await page.waitForTimeout(700);
   expect(await page.evaluate(()=>(window as any).spoken.length)).toBe(spokenCount);
   await page.evaluate(()=>{(window as any).fixture.faceRatio=.2;});
-  await expect(page.getByText('Move a little closer, keeping your whole head visible.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Turn a little to your right.',{exact:true})).toBeVisible();
   await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
   await page.evaluate(()=>{(window as any).fixture.faceRatio=.5;});
   await page.evaluate(() => { (window as any).fixture.pose={yaw:-15,pitch:0,roll:0}; });
   await expect(page.getByText('2 of 28 shots saved')).toBeVisible({timeout:15000});
   expect(await photoInfo(page)).toMatchObject({count:2,override:false});
+});
+
+
+test('a gentle head sweep collects automatic angles despite small pose jitter and imperfect soft targets',async({page})=>{
+ test.setTimeout(120000);
+ await injectAnalysis(page);await openCamera(page);
+ await expect(page.getByText('1 of 28 shots saved')).toBeVisible({timeout:30000});
+ await expect(page.locator('.camera-frame .pose-guide')).toBeVisible();
+ await page.evaluate(()=>{const f=(window as any).fixture;f.faceRatio=.30;f.blendshapes={jawOpen:.3};let flip=false;(window as any).sweepTimer=setInterval(()=>{flip=!flip;f.pose={yaw:(f.target??-15)+(flip?1:-1),pitch:flip?1:-1,roll:0};},70);});
+ for(const [index,yaw] of [-15,-30,-45,15,30,45].entries()) {
+  await page.evaluate(yaw=>{(window as any).fixture.target=yaw;},yaw);
+  await expect(page.getByText(`${index+2} of 28 shots saved`)).toBeVisible({timeout:15000});
+ }
+ await page.evaluate(()=>clearInterval((window as any).sweepTimer));
+ expect(await photoInfo(page)).toMatchObject({count:7,override:false});
+ await expect(page.getByText('Manual shot / use the shutter',{exact:true})).toBeVisible();
 });

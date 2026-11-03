@@ -12,7 +12,7 @@ function eligible(photo: Photo): boolean {
   return !photo.override && !!photo.quality && !photo.quality.hardFailure && ['A','B','C'].includes(photo.quality.tier) && photo.measurements?.faceCount === 1 && Number.isFinite(photo.measurements.sharpness) && photo.measurements.sharpness > 0 && typeof photo.hash === 'string' && /^[0-9a-f]{16}$/i.test(photo.hash) && bin(photo) !== null;
 }
 function intent(photo: Photo): string {
-  return JSON.stringify([bin(photo), (photo.measurements?.expressionMatch ?? 0) >= .8 ? photo.expression ?? null : null, photo.direction ?? null, photo.context ?? null]);
+  return JSON.stringify([photo.poseConvention??null,bin(photo), (photo.measurements?.expressionMatch ?? 0) >= .8 ? photo.expression ?? null : null, photo.direction ?? null, photo.context ?? null]);
 }
 // Redundancy is scoped to pose plus expression/gaze/context so the guided
 // variations are not erased by the frontal-pose cap. Unknown data earns no match.
