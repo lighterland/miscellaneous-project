@@ -1,22 +1,27 @@
-# Guided primary face scan
+# Continuous guided face scan
 
-New face sessions start a nine-angle primary scan: neutral yaw 0, +/-15, +/-30, +/-45 and chin up/down. Supplementary +/-60, +/-75 and +/-90 angles are offered separately. The primary summary is not a readiness certificate. Dataset quality, coverage and readiness rules are unchanged.
+New face sessions collect nine primary angles (front, +/-15, +/-30, +/-45 and chin up/down). Extra +/-60, +/-75 and +/-90 angles use the same continuous sweep in an optional second route. Start scan, keep the phone still, and move the head slowly along the example. There is no per-angle shutter, Next pose or pre-capture hold in this guided flow. Primary completion is not full dataset readiness.
 
-The local `Progress.guidedScan` field stores group and movement phase; no database index/schema migration is needed. Capture selection remains opportunistic inside the selected group. The suggested movement progresses front, left, return front, right, return front, chin up and chin down. Existing sessions retain their flow until Use guided face scan is chosen. Photo IDs and metadata remain unchanged.
+## Acquisition
 
-A large animated pose diagram and the voice share turning, holding, saving, recovering and complete states. The mirrored front-camera diagram follows the person's left/right. Repeated same-cue updates do not queue speech. Start scan enables voice for this scan, with an immediate mute control; saved preferences remain independently editable. Reduced-motion disables example animation.
+The controller analyzes an exact full-resolution stream snapshot and retains the highest-ranked eligible frame for the current measured bin. It releases replaced canvases immediately and flushes the best on bin exit or after five eligible samples. The frame is JPEG-encoded and analyzed again before durable storage. Angle tolerance, actual-bin membership and quality gates must still pass. This is a rolling best-frame window, not a recording and not a later sensor exposure. At most one best frame is retained between ticks; a flush can temporarily coexist with the next candidate and encoding buffers. No unbounded photo queue is created.
 
-The primary counter and ring reflect measured non-risky saved-photo coverage, not requested angles. Holding is green; saved coverage is orange. Pose loss returns the example to front. At 15 active seconds without a save the screen provides help; at 30 it offers a break/continuation. These are provisional interaction timings, not tuned quality thresholds. Capture, pause, calibration and countdown time are excluded. Continue defers gaps and retains shared retry/time budgets.
+Guided sweep photos use the actual stream dimensions with method canvas. On Samsung this can be lower resolution than takePhoto; manual/static capture retains its existing burst and optional sensor-still comparison. The quality short-side floor remains 1024 px. All hard floors, relative sharpness/exposure rules, weights, tiers and retry budgets are unchanged. The guided-only 500 ms pre-hold is replaced by in-motion selection, based on the reproduced user interaction failure; this is not a calibrated optical threshold change.
 
-Supplementary angles reuse the existing automatic capture and timed hands-free capture, with explicit risky review for unmeasured photos. Shutter and Next pose remain under More capture options in guided mode. The existing tolerance, 500 ms hold, five-frame burst, all quality floors/weights/tiers and three/ten/twenty-minute safety nets are unchanged.
+## Guidance and recovery
 
-## Verification
+The suggested target is the end of a left/right sweep, independent of the individual bins being collected. Primary movement goes front, left, front, right, front, chin up and down. Extra movement goes left, front, right. The example and voice share the same cue during collection and saving; they do not ask for a stop at each bin. A green collecting label means a frame currently meets requirements; orange ring segments, count and confirmation tone represent saved photos only.
 
-- Pure tests: group boundaries, stable suggestions, return phases, out-of-order capture, summary transition, deferred reasons/budgets, recovery and legacy enabling.
-- Browser fixtures use synthetic pixels; actual camera APIs, JPEG encoding, OPFS and IndexedDB are exercised. Cases cover nine-position acquisition without shutter, separate extras, tracking recovery, stalled help, write failure, progress only after durable save, reload and small/desktop layouts.
-- Legacy capture regressions cover full 28-shot flow, Session fix, interruption, retakes and countdown review/cancellation.
-- Pages verifier exercises actual face/hair/body workers online/offline, persists a synthetic capture, and rejects image-bearing or third-party network requests.
+The large code-native diagram sits beside the camera on phone and desktop without covering the face. Movement steps show the current phase. Automatic capture is plain text, not a false shutter button. Reduced-motion disables the example animation.
 
-## Real-device acceptance still required
+If extra-angle tracking disappears for one second after a deliberate turn of at least 45 degrees toward the guided side, the unfinished positions on that side are deferred as tracking-limited. The user returns to front and proceeds to the other side. Missing angles do not become photos or measured coverage. The extra summary shows its own actual count, including partial results; revisit and explicit countdown remain available as secondary options. This one-second grace period is provisional interaction recovery, not photo acceptance.
 
-On iPhone Safari and Samsung Chrome, complete a fresh primary scan without shutter/Next pose, interpreting degrees or assistance. Record duration, any unclear cue, tracking loss and extra taps. Check deliberate left/right movement, hold/saved cues, and a supplementary countdown while facing away. Only text observations are needed; do not upload photos. Synthetic tests do not establish device usability, calibration or fairness rates.
+The optional Progress.guidedScan group/phase and summaryOf fields need no schema migration. Existing photos, IDs, attempt limits and readiness are preserved. Older non-guided sessions retain their mode until Use guided face scan is selected. Pause, pagehide, disposal, group changes and countdown clear transient candidate frames. Durable-write errors pause safely without incrementing coverage. The 15/30-active-second help/continuation defaults remain.
+
+## Verification and limits
+
+The original continuous trace saved only 1/9 primary positions. The new regression crosses each target window in under 500 ms and collects 9 primary plus 6 extra positions without shutter/Next or individual stops. Synthetic pose markers travel in captured pixels so JPEG analysis sees the captured frame rather than the later live pose. This is one deterministic interaction regression, not a phone success-rate or fairness measurement.
+
+Unit coverage includes best-frame ownership, bin transitions, stationary selection, missing pose, actual chin coverage, broad suggestions and untrackable-side recovery. Browser checks exercise real camera/JPEG/OPFS/IndexedDB APIs with synthetic analysis, including delayed writes, reload, partial extras, pause and legacy capture flows. The Pages verifier covers actual model workers online/offline and rejects image-bearing or third-party HTTP requests.
+
+Physical iPhone/Samsung usability, real motion blur, memory pressure at native 4K, voice timing and tracking range still need device acceptance. Do not interpret simulated success as a Face ID-equivalent recognition or identity-verification guarantee. No user photos are needed for reporting; only duration, device, stalls, coverage and interruptions.

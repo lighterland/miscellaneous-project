@@ -8,7 +8,7 @@ export function ScanGuide({target,status,cue,mirror,active}:{target:Shot|undefin
  const yaw=target?.yaw??0,pitch=target?.pitch??0;
  const x=Math.sin(yaw*Math.PI/180)*(mirror?1:-1)*33;
  const y=Math.sin(pitch*Math.PI/180)*32;
- const moving=active&&status==='turning'&&cue!=='front'&&cue!=='back';
+ const moving=active&&['turning','collecting','saving'].includes(status)&&cue!=='front'&&cue!=='back';
  const arrowX=cue==='back'?-x:x,arrowPitch=cue==='back'?-pitch:pitch;
  const arrow=arrowX<0?'M65 22 H18 l9 -8 M18 22 l9 8':arrowX>0?'M115 22 H162 l-9 -8 M162 22 l-9 8':arrowPitch<0?'M156 110 V65 l-8 9 M156 65 l8 9':arrowPitch>0?'M156 65 V110 l-8 -9 M156 110 l8 -9':'';
  return <aside className="scan-example" data-motion={moving?'moving':'still'} data-state={active?status:'idle'} aria-label={s.scanExample}>

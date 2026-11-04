@@ -1,16 +1,16 @@
 import {expect,it} from 'vitest';
 import {freshProgress,acceptSlot} from '../../src/session/progress';
 import {selectSweepShot} from '../../src/session/free-sweep';
-import {beginGuidedScan,updateGuide,suggestedShot,chooseScanGroup,scanFeedback,stallLevel,primaryIds} from '../../src/session/guided-scan';
+import {beginGuidedScan,updateGuide,suggestedShot,chooseScanGroup,scanFeedback,stallLevel,primaryIds,deferUntrackedSide} from '../../src/session/guided-scan';
 const pose=(yaw=0,pitch=0)=>({yaw,pitch,roll:0});
 it('keeps a stable suggestion while collecting another primary angle',()=>{
  const p=beginGuidedScan({...freshProgress(0),completed:['turn-0']});
  const guided=updateGuide(p,pose());
- expect(suggestedShot(guided)?.id).toBe('turn--15');
+ expect(suggestedShot(guided)?.id).toBe('turn--45');
  const index=selectSweepShot(guided,pose(30))!;
  expect(index).toBe(5);
  const next=acceptSlot({...guided,index},'saved');
- expect(suggestedShot(updateGuide(next,pose(30)))?.id).toBe('turn--15');
+ expect(suggestedShot(updateGuide(next,pose(30)))?.id).toBe('turn--45');
  expect(selectSweepShot(guided,pose(75))).toBeNull();
 });
 it('returns to front between sides and then guides chin movement',()=>{
@@ -41,10 +41,26 @@ it('preserves skipped reasons and budgets when leaving and resuming a group',()=
 it('uses one truthful cue for recovery, hold, saving and overshoot',()=>{
  const p=updateGuide(beginGuidedScan({...freshProgress(0),completed:['turn-0']}),pose());
  expect(scanFeedback(p,null,false,false).status).toBe('recovering');
- expect(scanFeedback(p,pose(-15),true,false).status).toBe('holding');
+ expect(scanFeedback(p,pose(-15),true,false).status).toBe('collecting');
  expect(scanFeedback(p,pose(-15),false,true).status).toBe('saving');
- expect(scanFeedback(p,pose(-40),false,false).cue).toBe('back');
+ expect(scanFeedback(p,pose(-40),false,false).cue).toBe('left');
  expect(stallLevel(14999)).toBe('none');expect(stallLevel(15000)).toBe('help');expect(stallLevel(30000)).toBe('offer');
+});
+it('guides one broad extra sweep instead of stopping at each profile angle',()=>{
+ const p=chooseScanGroup(beginGuidedScan({...freshProgress(0),completed:[...primaryIds]}),'extra');
+ expect(suggestedShot(p)?.id).toBe('turn--90');
+ expect(scanFeedback(p,pose(-60),true,false).cue).toBe('left');
+ expect(scanFeedback(p,pose(-75),false,true).cue).toBe('left');
+});
+it('moves on from an untrackable extra side without crediting missing angles',()=>{
+ const p=chooseScanGroup(beginGuidedScan({...freshProgress(0),completed:[...primaryIds]}),'extra');
+ const next=deferUntrackedSide(p,-65);
+ expect(next.guidedScan?.phase).toBe('return-left');
+ expect(next.completed).toEqual(primaryIds);
+ expect(next.missed).toEqual(['turn--60','turn--75','turn--90']);
+ const right=updateGuide(next,pose());expect(suggestedShot(right)?.id).toBe('turn-90');
+ expect(deferUntrackedSide(p,0)).toEqual(p);
+ expect(deferUntrackedSide(p,65)).toEqual(p);
 });
 
 it('recovers to a frontal example and preserves an old session when enabled',()=>{

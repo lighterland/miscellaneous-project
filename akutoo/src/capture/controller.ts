@@ -1,4 +1,4 @@
-import {beginGuidedScan,guidedActive,updateGuide,scanFeedback,chooseScanGroup,stallLevel,type ScanStatus,type ScanCue} from '../session/guided-scan';
+import {beginGuidedScan,guidedActive,updateGuide,scanFeedback,chooseScanGroup,deferUntrackedSide,stallLevel,type ScanStatus,type ScanCue} from '../session/guided-scan';
 import {selectSweepShot,finishSweep,sweepActive,chooseTimedProfile} from '../session/free-sweep';
 import {handsFreeStep} from './hands-free';
 import {autoCaptureReady} from './auto-ready';
@@ -18,6 +18,7 @@ import { putSession, saveCapture } from '../storage/sessions';
 import { SessionConflict } from '../storage/recovery-plan';
 import { BrowserCamera, jpeg, thumbnail, type CameraSource } from './camera';
 import { preferStill } from './still-selection';
+import {offerFrame,measuredTarget,type FrameWindow} from './rolling-burst';
 import { capturePlan, captureProgress, detailGuide, detailMeasurements, syncDetailBudget } from '../details/plan';
 import { saveDetailCapture } from '../storage/details';
 
@@ -29,6 +30,7 @@ export interface CaptureState {
   retakeFinished: boolean; coveredBins: string[]; autoReady:boolean; holdProgress:number; poseCue:PoseCue|null; countdown:number|null; handsFreeReturning:boolean;
 }
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+interface SweepFrame {index:number;score:number;sharpness:number;canvas:HTMLCanvasElement;result:AnalysisResult;quality:QualityResult;}
 export class CaptureController {
   state: CaptureState;
   private camera: CameraSource;
@@ -40,6 +42,9 @@ export class CaptureController {
   private lastCapture = 0;
   private activeWithoutSave=0;
   private lastActiveTick:number|null=null;
+  private frames:FrameWindow<SweepFrame>|null=null;
+  private lastSweepYaw=0;
+  private lostSince:number|null=null;
   private previousPose: { yaw: number; pitch: number; time: number } | null = null;
   private disposed = false;
   private countdownTimer?:ReturnType<typeof setInterval>;
@@ -56,10 +61,11 @@ export class CaptureController {
     }
     const guided=!this.state.retakeFinished&&!this.state.session.details?.active&&!this.state.session.retakePhotoId&&guidedActive(this.progress);
     this.state.scan=guided?scanFeedback(this.progress,this.state.result?.pose??null,this.state.autoReady,this.state.busy):null;
-    if(this.state.scan&&(this.state.autoReady||this.state.busy))this.state.scan.target=this.shot;
     if(!this.disposed)this.changed({...this.state});
   }
   private get plan() { return capturePlan(this.state.session); }
+  private get continuous() {return guidedActive(this.progress)&&this.progress.guidedScan?.group!=='summary'&&!this.state.session.details?.active&&!this.state.session.retakePhotoId;}
+  private clearFrames(){if(this.frames)this.frames.best.canvas.width=0;this.frames=null;this.lostSince=null;this.lastSweepYaw=0;}
   private get progress() { return captureProgress(this.state.session); }
   private set progress(value) { if (this.state.session.details?.active) this.state.session.details.progress = value; else this.state.session.progress = value; }
   private get baseline() { return this.state.session.details?.active ? this.state.session.details.baseline : this.state.session.baseline; }
@@ -112,13 +118,17 @@ export class CaptureController {
     if (attempts !== elapsed) { this.progress.attempts = elapsed; try { await this.persist(); } catch (error) { this.state.message = error instanceof SessionConflict ? s.sessionChanged : s.saveError; this.emit(); } }
     if (generation !== this.generation) return;
     if (this.state.paused || this.state.busy || this.state.pending || this.state.countdown!==null || !this.analysis || !this.shot) { this.schedule(generation); return; }
+    let sampled:HTMLCanvasElement|undefined;
     try {
       this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
-      const result = await this.measure(this.video);
+      // Keep the exact analyzed pixels; a later exposure may be another pose.
+      if(this.continuous&&this.baseline)sampled=this.camera.frame();
+      const result = await this.measure(sampled??this.video);
       if (generation !== this.generation) return;
-      if(this.state.countdown!==null||this.state.paused||this.state.pending){this.schedule(generation);return;}
+      if(this.state.countdown!==null||this.state.paused||this.state.pending||this.state.busy){this.schedule(generation);return;}
       this.state.result = result;
       const now = performance.now();
+      if(sampled&&this.baseline){await this.collectFrame(sampled,result,generation);sampled=undefined;this.emit();this.schedule(generation);return;}
       const m = this.metrics(result);
       if (!m) { this.hold=null;this.previousPose=null;this.state.quality = { score: 0, tier: 'D', hardFailure: true, reason: 'invalid' }; this.state.message = s.fix.invalid; this.emit(); this.schedule(generation); return; }
       if (!this.baseline) {
@@ -149,8 +159,38 @@ export class CaptureController {
         if (readyToCapture(this.hold, now, this.lastCapture)) { await this.capture(false); }
       }
       this.emit();
-    } catch { if (generation === this.generation) { this.analysis?.close(); this.analysis = undefined; this.state.modelFailed = true; this.state.message = s.manualOnly; this.emit(); } }
+    } catch { if (generation === this.generation) { this.clearFrames();this.analysis?.close(); this.analysis = undefined; this.state.modelFailed = true; this.state.message = s.manualOnly; this.emit(); } }
+    finally {if(sampled)sampled.width=0;}
     this.schedule(generation);
+  }
+  private async collectFrame(canvas:HTMLCanvasElement,result:AnalysisResult,generation:number){
+    const previousGuide=this.progress.guidedScan;
+    if(result.pose){this.lastSweepYaw=result.pose.yaw;this.lostSince=null;}
+    else {
+      this.lostSince??=performance.now();
+      // An interaction grace period, not a relaxed photo gate.
+      if(performance.now()-this.lostSince>=1000)this.progress=deferUntrackedSide(this.progress,this.lastSweepYaw);
+    }
+    this.progress=updateGuide(this.progress,result.pose);
+    if(previousGuide!==this.progress.guidedScan)await this.persist();
+    if(generation!==this.generation||this.state.paused||this.state.busy||this.state.countdown!==null){canvas.width=0;return;}
+    const index=selectSweepShot(this.progress,result.pose);
+    const target=index===null?this.shot:this.plan[index];
+    const quality=target?this.grade(result,target):{score:0,tier:'D' as const,hardFailure:true,reason:'invalid' as const};
+    this.state.quality=quality;
+    const eligible=index!==null&&!!target&&measuredTarget(target,result.pose)&&!quality.hardFailure&&quality.tier!=='D';
+    const frame=eligible?{index,score:quality.score,sharpness:result.measurements?.sharpness??0,canvas,result,quality}:null;
+    const batch=offerFrame(this.frames,frame);this.frames=batch.window;
+    if(!frame)canvas.width=0;
+    for(const discarded of batch.discard)discarded.canvas.width=0;
+    this.state.autoReady=eligible;
+    if(batch.ready){
+      const ready=batch.ready;
+      if(generation!==this.generation||this.state.paused){ready.canvas.width=0;this.clearFrames();return;}
+      this.progress={...this.progress,index:ready.index};
+      await this.capture(false,ready);
+      if(this.state.paused||generation!==this.generation)this.clearFrames();
+    }
   }
   private grade(result: AnalysisResult, shot: Shot): QualityResult {
     if (!this.baseline) return { score: 0, tier: 'D', hardFailure: true, reason: 'invalid' };
@@ -158,16 +198,17 @@ export class CaptureController {
     if (!measurements) return { score: 0, tier: 'D', hardFailure: true, reason: 'invalid' };
     return evaluateQuality({ ...measurements, angleError: result.pose ? Math.hypot(result.pose.yaw - shot.yaw, result.pose.pitch - shot.pitch) : 90, expressionMatch: expressionMatch(result.blendshapes, shot.expression) }, this.baseline, this.progress.attempts.relaxed, shot.detail ? .7 : undefined);
   }
-  async capture(manual = true) {
+  async capture(manual = true, collected?:SweepFrame) {
     const shot = this.shot;
-    if (!shot || !this.state.running || this.state.busy || this.state.loading || this.state.pending) return;
+    if (!shot || !this.state.running || this.state.busy || this.state.loading || this.state.pending) {if(collected)collected.canvas.width=0;return;}
+    if(!collected)this.clearFrames();
     const generation = this.generation;
     const interrupted = () => { if (generation !== this.generation) throw new DOMException('Capture interrupted', 'AbortError'); };
     this.state.busy = true;this.lastActiveTick=null; this.hold = null; this.emit();
-    let best: { canvas: HTMLCanvasElement; result: AnalysisResult | null; quality: QualityResult } | null = null;
+    let best: { canvas: HTMLCanvasElement; result: AnalysisResult | null; quality: QualityResult } | null = collected??null;
     try {
       const began = performance.now();
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; !collected && i < 5; i++) {
         interrupted();
         const canvas = this.camera.frame();
         let result: AnalysisResult | null = null;
@@ -187,8 +228,12 @@ export class CaptureController {
         if (this.analysis) { try { candidate.result = await this.measure(candidate.canvas, true); candidate.quality = this.grade(candidate.result, shot); } catch { candidate.result = null; candidate.quality = { score:0, tier:'D', hardFailure:true, reason:'invalid' }; } }
       };
       await measureEncoded(best, full);
+      // JPEG reanalysis must support the actual angle, not stale live tracking.
+      if(collected&&(!measuredTarget(shot,best.result?.pose??null)||best.quality.hardFailure||best.quality.tier==='D')){
+        best.quality={score:0,tier:'D',hardFailure:true,reason:best.quality.reason??'invalid'};
+      }
       interrupted();
-      if (this.analysis && this.baseline && this.camera.still) {
+      if (!collected && this.analysis && this.baseline && this.camera.still) {
         const canvas = await this.camera.still();
         if (canvas) {
           try {
@@ -278,6 +323,7 @@ export class CaptureController {
     this.state.paused = false; this.emit();
   }
   cancelCountdown() {
+    this.clearFrames();
     this.countdownGeneration++;clearInterval(this.countdownTimer);this.countdownTimer=undefined;
     this.state.countdown=null;this.state.handsFreeReturning=false;
   }
@@ -313,6 +359,6 @@ export class CaptureController {
   async revisit() { this.progress = revisit(this.progress, this.plan); await this.persist(); }
   pause() { this.cancelCountdown(); this.state.paused = !this.state.paused; this.lastActiveTick=null;this.activeWithoutSave=0;this.state.stall='none';this.hold = null; this.emit(); }
   interrupt() { if (!this.state.running && !this.state.loading) return; this.stop(); this.state.message = s.cameraInterrupted; this.emit(); }
-  stop(preserveCountdown=false) { if(!preserveCountdown)this.cancelCountdown(); this.generation++;this.lastActiveTick=null; clearTimeout(this.timer); this.camera.stop(); this.analysis?.close(); this.analysis = undefined; this.state.running = false; this.hold = null; this.previousPose = null; }
+  stop(preserveCountdown=false) { this.clearFrames();if(!preserveCountdown)this.cancelCountdown(); this.generation++;this.lastActiveTick=null; clearTimeout(this.timer); this.camera.stop(); this.analysis?.close(); this.analysis = undefined; this.state.running = false; this.hold = null; this.previousPose = null; }
   dispose() { this.disposed = true; this.stop(); this.clearPending(); }
 }

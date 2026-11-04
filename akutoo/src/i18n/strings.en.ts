@@ -12,11 +12,14 @@ const detailInstructions: Record<string, string> = {
 };
 export const s = {
   scanAutomatic:'Automatic capture',scanWelcome:'Face the camera. I will guide you through the scan.',scanStartHelp:'Voice guidance starts with the scan. You can mute it at any time.',scanTitle:'Face scan',scanExtraTitle:'Extra angles',scanExample:'Follow this movement',scanStart:'Start scan',
-  scanCues:{front:'Face the camera.',left:'Turn slowly to your left.',right:'Turn slowly to your right.',up:'Raise your chin a little.',down:'Lower your chin a little.',back:'Come back a little.',hold:'Hold here. Taking your photo.',saving:'Hold here. Taking your photo.',recover:'Face the camera so I can find you again.',complete:'Your scan is saved.'},
+  scanCues:{front:'Slowly face the camera.',left:'Slowly sweep to your left.',right:'Slowly sweep to your right.',up:'Slowly tilt your chin up.',down:'Slowly tilt your chin down.',back:'Slowly sweep back toward the camera.',hold:'Hold here. Taking your photo.',saving:'Keep moving slowly.',recover:'Slowly face the camera so I can find you.',complete:'Your scan is saved.'},
+  scanCollecting:'Collecting clear frames',scanMoving:'Scan is on · move slowly',scanSavingFrame:'Saving a clear frame',scanExtraSummary:'Extra scan saved',
+  scanExtraHelp:'Turn as far as feels comfortable. If tracking is lost, face the camera and follow the other side. Unreadable profiles stay unfilled.',
+  scanJourney:{front:'Look ahead',left:'Sweep left','return-left':'Return to center',right:'Sweep right','return-right':'Return to center',up:'Tilt up',down:'Tilt down'},
   scanProgress:(count:number,total:number)=>`${count} of ${total} angles saved`,
   scanSummary:'Main scan saved',scanSummaryHelp:'Your photos are safe. Extra side angles and expressions can add variety. This is not the full dataset readiness score.',
   scanExpressions:'Continue to expressions',scanExtras:'Add extra angles',scanFinish:'Continue with these photos',
-  scanHelp:'Move your head, keep your phone still. Stop when the guide says Hold here.',
+  scanHelp:'Keep your phone still. Move your head in one slow sweep; clear photos are collected along the way. No need to stop at each angle.',
   scanStalled:'Not moving forward? Face the camera, then follow the example slowly. Your saved angles stay saved.',
   scanOffer:'Take a break or continue with the photos you have. You can revisit missing angles later.',
   scanMeasurements:'Angle details',scanOptions:'More capture options',scanReturnHelp:'Come back to face the camera before the next movement.',

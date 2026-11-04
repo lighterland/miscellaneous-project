@@ -334,7 +334,7 @@ select { min-height: 48px; border-radius: 12px; border: 1px solid #857a9c; color
 @keyframes scan-example-outline { 0%,15% {transform:scaleX(1);} 65%,100% {transform:scaleX(var(--demo-scale));} }
 .guided-screen .instruction { font-size:23px;line-height:1.25;font-weight:700;margin:12px 0;min-height:58px; }
 .guided-screen .auto-status { margin-bottom:10px;padding:8px 14px; }
-.auto-capture-mark { width:56px;height:56px;display:grid;place-items:center;color:#c9bfdc; }.auto-capture-mark svg { width:48px;height:48px;fill:none;stroke:currentColor;stroke-width:2; }
+.auto-capture-mark { max-width:110px;min-height:48px;display:grid;place-items:center;color:#c9bfdc;font-size:13px;line-height:1.4;text-align:center; }
 .scan-options { text-align:left;border-top:1px solid #51465f;margin:10px 0;padding:0 8px; }.scan-options summary { cursor:pointer;min-height:48px;align-content:center;color:#c9bfdc; }.scan-options p { font-size:14px; }
 .scan-continue { margin:8px 0; }.scan-stall { padding:14px;background:#241c38;color:#f4f1fb;border-radius:12px;font-size:15px; }
 .scan-summary { text-align:left;padding:24px 0; }.scan-summary h2 { font-size:30px; }.scan-summary p { color:#e0d9ee;line-height:1.6; }.scan-summary button { display:block;width:100%;margin:12px 0; }
@@ -351,3 +351,18 @@ select { min-height: 48px; border-radius: 12px; border: 1px solid #857a9c; color
 @media(prefers-reduced-motion:reduce) { .scan-example[data-motion=moving] .demo-features,.scan-example[data-motion=moving] .demo-outline { animation:none; } }
 
 .guided-screen .scan-visual.is-hidden { display:none; }
+
+/* Continuous scan: movement example beside the face, never covering it. */
+.guided-screen .scan-visual { display:grid;grid-template-columns:minmax(0,1.45fr) minmax(110px,.8fr);gap:12px;align-items:center; }
+.guided-screen .scan-example { position:static;width:100%;max-width:none;padding:8px 4px;border:0;background:transparent; }
+.guided-screen .scan-example svg { max-height:210px; }
+.guided-screen .scan-example[data-state=collecting] { color:#b9efc6; }
+.guided-screen .camera-frame { height:clamp(220px,36svh,350px);border-radius:16px; }
+.guided-screen .scan-example[data-motion=moving] .demo-features,.guided-screen .scan-example[data-motion=moving] .demo-outline { animation-duration:5s; }
+.scan-journey { display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:14px 0 12px;font-size:12px;color:#c9bfdc; }
+.scan-journey [aria-current=step] { color:#ff9b64;font-weight:700;text-decoration:underline;text-underline-offset:5px; }
+.guided-screen .auto-status { border:0;background:transparent;padding:4px 0;margin:0;color:#c9bfdc; }
+.guided-screen .auto-status.is-ready { color:#b9efc6;background:#173c2d;border-radius:12px;padding:8px; }
+.guided-screen .capture-actions { margin-top:12px; }
+@media(min-width:900px) { .guided-screen .scan-visual { grid-template-columns:380px 260px;gap:32px; }.guided-screen .camera-frame { height:420px; }.guided-screen .scan-example svg { max-height:300px; } }
+@media(max-height:720px) and (max-width:899px) { .guided-screen .camera-frame { height:210px; }.scan-journey { margin:8px 0;gap:8px; }.guided-screen .scan-example svg { max-height:170px; } }

@@ -5,21 +5,34 @@ import { unzipSync, strFromU8 } from 'fflate';
 
 // Only the analysis boundary is deterministic here. Camera pixels, JPEG encoding,
 // OPFS and IndexedDB use real browser APIs. analysis.spec.ts executes the real model.
-async function injectAnalysis(page: Page, unavailable = false) {
-  await page.addInitScript(({ unavailable }) => {
+async function injectAnalysis(page: Page, unavailable = false, snapshotPose = false) {
+  await page.addInitScript(({ unavailable, snapshotPose }) => {
     const OriginalWorker = window.Worker;
     // Expose the optional sharing UI without opening an OS share target in tests.
     Object.defineProperty(navigator, 'canShare', { configurable: true, value: (data: ShareData) => !!data.files?.length });
     Object.defineProperty(navigator, 'share', { configurable: true, value: async (data: ShareData) => { (window as any).sharedNames = data.files?.map(file => file.name); } });
     (window as any).fixture = { clipped: .01 };
+    if(snapshotPose){
+      // Encode synthetic pose into captured pixels so JPEG reanalysis observes
+      // the original frame, even while the simulated head continues moving.
+      const draw=CanvasRenderingContext2D.prototype.drawImage;
+      CanvasRenderingContext2D.prototype.drawImage=function(this:CanvasRenderingContext2D,...args:any[]){
+        (draw as any).apply(this,args);
+        if(args[0] instanceof HTMLVideoElement){const p=(window as any).fixture.pose??{yaw:0,pitch:0};this.fillStyle=`rgb(${p.yaw+100} ${p.pitch+100} 222)`;this.fillRect(0,0,64,64);}
+      } as typeof draw;
+    }
     window.Worker = class {
       onmessage: ((event: any) => void) | null = null; onerror = null;
       constructor(url: string | URL, options?: WorkerOptions) { if (!String(url).includes('worker-')) return new OriginalWorker(url, options) as any; }
       postMessage(message: any) {
         if (message.type === 'load') { setTimeout(() => this.onmessage?.({ data: unavailable ? { id: message.id, type: 'error', error: 'fixture unavailable' } : { id: message.id, type: 'ready' } }), 5); return; }
-        const width = message.bitmap.width, height = message.bitmap.height; message.bitmap.close();
+        const width = message.bitmap.width, height = message.bitmap.height;
+        let snapshot:any;
+        if(snapshotPose){const c=new OffscreenCanvas(1,1),ctx=c.getContext('2d')!;ctx.drawImage(message.bitmap,20,20,1,1,0,0,1,1);const rgb=ctx.getImageData(0,0,1,1).data;if(Math.abs(rgb[2]-222)<4)snapshot={yaw:rgb[0]-100,pitch:rgb[1]-100,roll:0};}
+        message.bitmap.close();
         const fixture = (window as any).fixture;
         const result = { measurements: { faceCount: fixture.faceCount??1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: fixture.faceRatio ?? .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: 'pose' in fixture?fixture.pose:{ yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
+        if(snapshot)result.pose=snapshot;
         setTimeout(() => this.onmessage?.({ data: { id: message.id, type: 'result', result } }), fixture.delay??5);
       }
       terminate() {}
@@ -29,7 +42,7 @@ async function injectAnalysis(page: Page, unavailable = false) {
       // Bound synthetic-camera workload; the production CameraSource still requests 4K.
       const stream = await original({ ...constraints, video: { width: { ideal: 1280 }, height: { ideal: 1024 } } }); (window as any).captureTracks = stream.getTracks(); return stream;
     };
-  }, { unavailable });
+  }, { unavailable, snapshotPose });
 }
 async function openCamera(page: Page, guided = false) {
   await page.goto('/'); await page.getByRole('button', { name: 'Start new session' }).click();
@@ -651,12 +664,28 @@ test('starting a countdown cannot inherit green readiness from the previous live
 });
 
 
+test('continuous movement collects primary and extra angles without per-angle holds',async({page})=>{
+ test.setTimeout(90000);await injectAnalysis(page,false,true);await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ // Each angle window is crossed in under 500 ms: no stop at an individual target.
+ const sweep=async(points:{yaw:number;pitch:number}[])=>{
+  await page.evaluate(async points=>{for(const pose of points){(window as any).fixture.pose={...pose,roll:0};await new Promise(r=>setTimeout(r,160));}},points);
+ };
+ const side=(sign:number,end:number)=>Array.from({length:end/5},(_,i)=>({yaw:sign*(i+1)*5,pitch:0}));
+ await sweep([...side(-1,50),{yaw:0,pitch:0},...side(1,50),{yaw:0,pitch:0},...[ -5,-10,-15,-20,-25,0,5,10,15,20,25,0].map(pitch=>({yaw:0,pitch}))]);
+ await expect(page.getByRole('heading',{name:'Main scan saved',exact:true})).toBeVisible({timeout:10000});
+ expect((await photoInfo(page))?.count).toBe(9);
+ await page.getByRole('button',{name:'Add extra angles',exact:true}).click();
+ await sweep([...side(-1,90),{yaw:0,pitch:0},...side(1,90),{yaw:0,pitch:0}]);
+ await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:10000}).toBe(15);
+});
+
 test('guided main scan collects nine angles hands-free with stable cues and a separate extras summary',async({page,context})=>{
  test.setTimeout(120000);const violations:string[]=[];
  context.on('request',r=>{if(!['GET','HEAD'].includes(r.method())||r.postDataBuffer()||new URL(r.url()).origin!=='http://localhost:5174')violations.push(r.url());});
  await injectAnalysis(page);await page.setViewportSize({width:390,height:844});await openCamera(page,true);
  await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
- await expect(page.locator('.instruction')).toHaveText('Turn slowly to your left.');
+ await expect(page.locator('.instruction')).toHaveText('Slowly sweep to your left.');
  for(const [name,width,height]of [['mobile',390,844],['short',375,667],['desktop',1280,900]]as const){
   await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -666,7 +695,7 @@ test('guided main scan collects nine angles hands-free with stable cues and a se
  // Off-axis primary capture must not move the leftward suggestion to the right.
  await page.evaluate(()=>{(window as any).fixture.pose={yaw:30,pitch:0,roll:0};});
  await expect(page.getByText('2 of 9 angles saved',{exact:true})).toBeVisible({timeout:15000});
- await expect(page.locator('.instruction')).toHaveText('Turn slowly to your left.');
+ await expect(page.locator('.instruction')).toHaveText('Slowly sweep to your left.');
  await page.evaluate(()=>{(window as any).fixture.pose=null;});
  await expect(page.locator('.scan-example')).toHaveAttribute('data-state','recovering');
  await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
@@ -680,7 +709,8 @@ test('guided main scan collects nine angles hands-free with stable cues and a se
  await page.getByRole('button',{name:'Add extra angles',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Extra angles',exact:true})).toBeVisible();
  await expect(page.getByText('0 of 6 angles saved',{exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:'Left profile · hands-free',exact:true})).toBeVisible();
+ await page.getByText('More capture options',{exact:true}).click();
+ await expect(page.getByRole('button',{name:'Take after countdown',exact:true})).toBeVisible();
  expect(violations).toEqual([]);
 });
 
@@ -689,7 +719,7 @@ test('guided scan recovery, pause and stalled help preserve saved evidence',asyn
  await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
  const original=await photoInfo(page);
  await page.evaluate(()=>{(window as any).fixture.pose={yaw:-70,pitch:0,roll:0};});
- await expect(page.locator('.instruction')).toHaveText('Come back a little.');
+ await expect(page.locator('.instruction')).toHaveText('Slowly sweep back toward the camera.');
  await expect(page.locator('.scan-stall')).toBeVisible({timeout:22000});
  await page.getByRole('button',{name:'Pause',exact:true}).click();await expect(page.locator('.scan-stall')).toHaveCount(0);
  await page.getByRole('button',{name:'Resume',exact:true}).click();
@@ -699,6 +729,31 @@ test('guided scan recovery, pause and stalled help preserve saved evidence',asyn
  await expect(page.getByRole('heading',{name:'Main scan saved',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Continue to expressions',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Expressions',exact:true})).toBeVisible();
+});
+
+test('extra sweep recovers from untrackable profiles and finishes with honest partial coverage',async({page})=>{
+ test.setTimeout(90000);await injectAnalysis(page);await page.setViewportSize({width:390,height:844});await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Continue with these photos',exact:true}).click();
+ await page.getByRole('button',{name:'Add extra angles',exact:true}).click();
+ for(const [yaw,count]of [[-60,1],[60,2]]){
+  await page.evaluate(yaw=>{(window as any).fixture.pose={yaw,pitch:0,roll:0};},yaw);
+  await expect(page.getByText(`${count} of 6 angles saved`,{exact:true})).toBeVisible({timeout:15000});
+  await page.evaluate(()=>{(window as any).fixture.pose=null;(window as any).fixture.faceCount=0;});
+  if(yaw<0){
+   await expect(page.locator('.instruction')).toHaveText('Slowly face the camera so I can find you.');
+   await expect(page.locator('.scan-example')).toHaveAttribute('data-motion','still');
+   await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
+   await page.waitForTimeout(1300);
+   await page.screenshot({path:'.impeccable/review/continuous-extra-recovery-mobile.png',fullPage:true});
+   await page.evaluate(()=>{(window as any).fixture.pose={yaw:0,pitch:0,roll:0};(window as any).fixture.faceCount=1;});
+   await expect(page.locator('.instruction')).toHaveText('Slowly sweep to your right.');
+  }
+ }
+ await expect(page.getByRole('heading',{name:'Extra scan saved',exact:true})).toBeVisible({timeout:15000});
+ await expect(page.getByText('2 of 6 angles saved',{exact:true})).toHaveCount(2);
+ expect((await photoInfo(page))?.count).toBe(3);
+ await page.screenshot({path:'.impeccable/review/continuous-extra-summary-mobile.png',fullPage:true});
 });
 
 
@@ -715,7 +770,7 @@ test('guided saving never awards progress before durable storage and resumes aft
   (window as any).fixture.pose={yaw:-15,pitch:0,roll:0};
  });
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).rejectWrite)).toBe('function');
- await expect(page.locator('.instruction')).toHaveText('Hold here. Taking your photo.');
+ await expect(page.locator('.instruction')).toHaveText('Slowly sweep to your left.');
  await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible();
  expect(await photoInfo(page)).toMatchObject({count:1});
  await page.evaluate(()=>(window as any).rejectWrite());
