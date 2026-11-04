@@ -31,9 +31,20 @@ async function injectAnalysis(page: Page, unavailable = false) {
     };
   }, { unavailable });
 }
-async function openCamera(page: Page) {
+async function openCamera(page: Page, guided = false) {
   await page.goto('/'); await page.getByRole('button', { name: 'Start new session' }).click();
-  await page.getByRole('button', { name: 'Start camera', exact: true }).click();
+  if(!guided){
+    // Preserve regression coverage for existing free-sweep sessions. New-mode tests
+    // below use the real default session without modifying its progress.
+    await page.getByRole('button',{name:'Finish for now',exact:true}).click();
+    await page.getByRole('button',{name:'Back to sessions',exact:true}).click();
+    await page.evaluate(async()=>{
+      const database=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('akutoo');r.onsuccess=()=>resolve(r.result);});
+      await new Promise<void>(resolve=>{const tx=database.transaction('sessions','readwrite'),table=tx.objectStore('sessions'),r=table.getAll();r.onsuccess=()=>{const session=r.result[0];delete session.progress.guidedScan;table.put(session);};tx.oncomplete=()=>resolve();});database.close();
+    });
+    await page.reload();await page.getByRole('button',{name:'Continue session',exact:true}).click();
+  }
+  await page.getByRole('button', { name: guided?'Start scan':'Start camera', exact: true }).click();
 }
 async function photoInfo(page: Page) {
   return page.evaluate(async () => {
@@ -637,4 +648,82 @@ test('starting a countdown cannot inherit green readiness from the previous live
  await expect(page.locator('.handsfree-countdown')).toBeVisible();
  await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
  await page.getByRole('button',{name:'Pause',exact:true}).click();
+});
+
+
+test('guided main scan collects nine angles hands-free with stable cues and a separate extras summary',async({page,context})=>{
+ test.setTimeout(120000);const violations:string[]=[];
+ context.on('request',r=>{if(!['GET','HEAD'].includes(r.method())||r.postDataBuffer()||new URL(r.url()).origin!=='http://localhost:5174')violations.push(r.url());});
+ await injectAnalysis(page);await page.setViewportSize({width:390,height:844});await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ await expect(page.locator('.instruction')).toHaveText('Turn slowly to your left.');
+ for(const [name,width,height]of [['mobile',390,844],['short',375,667],['desktop',1280,900]]as const){
+  await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const pause=await page.getByRole('button',{name:'Pause',exact:true}).boundingBox();expect(pause!.y+pause!.height).toBeLessThan(height);
+  await page.screenshot({path:`.impeccable/review/guided-${name}.png`,fullPage:true});
+ }
+ // Off-axis primary capture must not move the leftward suggestion to the right.
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:30,pitch:0,roll:0};});
+ await expect(page.getByText('2 of 9 angles saved',{exact:true})).toBeVisible({timeout:15000});
+ await expect(page.locator('.instruction')).toHaveText('Turn slowly to your left.');
+ await page.evaluate(()=>{(window as any).fixture.pose=null;});
+ await expect(page.locator('.scan-example')).toHaveAttribute('data-state','recovering');
+ await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
+ for(const [index,pose]of [{yaw:-15,pitch:0},{yaw:-30,pitch:0},{yaw:-45,pitch:0},{yaw:15,pitch:0},{yaw:45,pitch:0},{yaw:0,pitch:-15},{yaw:0,pitch:15}].entries()){
+  await page.evaluate(pose=>{(window as any).fixture.pose={...pose,roll:0};},pose);
+  await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBe(index+3);
+ }
+ await expect(page.getByRole('heading',{name:'Main scan saved',exact:true})).toBeVisible();
+ expect(await photoInfo(page)).toMatchObject({count:9,override:false});
+ for(const [name,width,height]of [['mobile',390,844],['desktop',1280,900]]as const){await page.setViewportSize({width,height});await expect(page.locator('.scan-visual')).toBeHidden();await page.screenshot({path:`.impeccable/review/guided-summary-${name}.png`,fullPage:true});}
+ await page.getByRole('button',{name:'Add extra angles',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Extra angles',exact:true})).toBeVisible();
+ await expect(page.getByText('0 of 6 angles saved',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Left profile · hands-free',exact:true})).toBeVisible();
+ expect(violations).toEqual([]);
+});
+
+test('guided scan recovery, pause and stalled help preserve saved evidence',async({page})=>{
+ test.setTimeout(90000);await injectAnalysis(page);await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ const original=await photoInfo(page);
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:-70,pitch:0,roll:0};});
+ await expect(page.locator('.instruction')).toHaveText('Come back a little.');
+ await expect(page.locator('.scan-stall')).toBeVisible({timeout:22000});
+ await page.getByRole('button',{name:'Pause',exact:true}).click();await expect(page.locator('.scan-stall')).toHaveCount(0);
+ await page.getByRole('button',{name:'Resume',exact:true}).click();
+ await expect(page.getByText('Take a break or continue with the photos you have. You can revisit missing angles later.',{exact:true})).toBeVisible({timeout:40000});
+ expect(await photoInfo(page)).toMatchObject({id:original!.id,count:1});
+ await page.getByRole('button',{name:'Continue with these photos',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Main scan saved',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Continue to expressions',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Expressions',exact:true})).toBeVisible();
+});
+
+
+test('guided saving never awards progress before durable storage and resumes after a write error',async({page})=>{
+ test.setTimeout(90000);await injectAnalysis(page);await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ await page.evaluate(()=>{
+  const close=FileSystemWritableFileStream.prototype.close;
+  (window as any).delayWrite=true;
+  FileSystemWritableFileStream.prototype.close=async function(){
+   await close.call(this);
+   if((window as any).delayWrite){(window as any).delayWrite=false;await new Promise<void>((_,reject)=>{(window as any).rejectWrite=()=>reject(new DOMException('Synthetic write error','QuotaExceededError'));});}
+  };
+  (window as any).fixture.pose={yaw:-15,pitch:0,roll:0};
+ });
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).rejectWrite)).toBe('function');
+ await expect(page.locator('.instruction')).toHaveText('Hold here. Taking your photo.');
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible();
+ expect(await photoInfo(page)).toMatchObject({count:1});
+ await page.evaluate(()=>(window as any).rejectWrite());
+ await expect(page.getByRole('alert')).toHaveText('Photo could not be saved. Your earlier photos are safe. Check free space, then try again.');
+ await page.getByRole('button',{name:'Resume',exact:true}).click();
+ await expect(page.getByText('2 of 9 angles saved',{exact:true})).toBeVisible({timeout:15000});
+ await page.getByRole('button',{name:'Finish for now',exact:true}).click();await page.getByRole('button',{name:'Back to sessions',exact:true}).click();
+ await page.reload();await page.getByRole('button',{name:'Continue session',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Start scan',exact:true})).toBeVisible();
+ await expect(page.getByText('2 of 9 angles saved',{exact:true})).toBeVisible({timeout:15000});
 });

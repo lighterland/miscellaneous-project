@@ -1,3 +1,4 @@
+import {guidedActive,groupIds} from './guided-scan';
 import {nextSlot,resetCause} from './attempts';
 import type {Progress} from './progress';
 import {shots} from './shotlist';
@@ -11,7 +12,7 @@ export function nextSweepIndex(p:Pick<Progress,'completed'|'missed'>):number {
 export function selectSweepShot(p:Progress,pose:AnalysisResult['pose']):number|null {
  if(!sweepActive(p)||!pose||![pose.yaw,pose.pitch,pose.roll].every(Number.isFinite))return null;
  const candidates=sweepShots.map((shot,index)=>({shot,index,error:Math.hypot(shot.yaw-pose.yaw,shot.pitch-pose.pitch)}))
- .filter(({shot})=>!p.completed.includes(shot.id)&&!p.missed.includes(shot.id)&&Math.abs(shot.yaw-pose.yaw)<=7&&Math.abs(shot.pitch-pose.pitch)<=7);
+ .filter(({shot})=>(!guidedActive(p)||groupIds(p).includes(shot.id))&&!p.completed.includes(shot.id)&&!p.missed.includes(shot.id)&&Math.abs(shot.yaw-pose.yaw)<=7&&Math.abs(shot.pitch-pose.pitch)<=7);
  const current=candidates.find(candidate=>candidate.index===p.index);
  return (current??candidates.sort((a,b)=>a.error-b.error)[0])?.index??null;
 }

@@ -58,8 +58,8 @@ test('preferences survive reload and the capture voice control updates the saved
   await capture(page, 'settings-mobile', 390, 844); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await capture(page, 'settings-desktop', 1280, 900);
   await page.reload(); await page.getByRole('button', { name: 'Settings', exact: true }).click(); await expect(page.getByRole('checkbox', { name: 'Voice guidance', exact: true })).toBeChecked(); await expect(page.getByRole('combobox', { name: 'Units', exact: true })).toHaveValue('imperial');
-  await page.getByRole('button', { name: 'Back to sessions', exact: true }).click(); await page.getByRole('button', { name: 'Start new session', exact: true }).click(); await page.getByRole('button', { name: 'Start camera', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Voice on', exact: true })).toBeVisible(); await expect.poll(() => page.evaluate(() => (window as any).spokenInstruction)).toBe('Look straight ahead.');
+  await page.getByRole('button', { name: 'Back to sessions', exact: true }).click(); await page.getByRole('button', { name: 'Start new session', exact: true }).click(); await page.getByRole('button', { name: 'Start scan', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Voice on', exact: true })).toBeVisible(); await expect.poll(() => page.evaluate(() => (window as any).spokenInstruction)).toBe('Face the camera. I will guide you through the scan.');
   await page.getByRole('button', { name: 'Voice on', exact: true }).click(); await expect(page.getByRole('button', { name: 'Voice off', exact: true })).toBeVisible();
   await expect.poll(async () => (await stored(page)).settings.find(item => item.key === 'preferences')?.value.voice).toBe(false);
   expect(violations).toEqual([]);

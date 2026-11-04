@@ -1,3 +1,4 @@
+import {beginGuidedScan} from '../session/guided-scan';
 import { db, type Photo, type Session } from './db';
 import { freshProgress, acceptSlot } from '../session/progress';
 import { readLocalFile, writeLocalFile, removeLocalFile } from './opfs';
@@ -13,7 +14,7 @@ export async function newSession(label: string,mode:Session['mode']='face'): Pro
   return storageLock(async () => {
   if (await deletionPending()) throw new Error('Deletion pending');
   const now = Date.now();
-  const session: Session = { id: crypto.randomUUID(), label, createdAt: now, updatedAt: now, mode, preset: 'general', status: 'setup', stage: 1, progress: freshProgress(now),...(mode==='hair'?{hair:freshHair()}:{}) };
+  const session: Session = { id: crypto.randomUUID(), label, createdAt: now, updatedAt: now, mode, preset: 'general', status: 'setup', stage: 1, progress: mode==='face'?beginGuidedScan(freshProgress(now)):freshProgress(now),...(mode==='hair'?{hair:freshHair()}:{}) };
   if(mode==='body')session.body=freshBody();
   await db.sessions.add(session); return session;
   });

@@ -11,9 +11,19 @@ const detailInstructions: Record<string, string> = {
   'detail-beard-front': 'Align your beard or moustache from the front inside the guide.', 'detail-beard-side': 'Turn to show the side of your beard inside the guide.',
 };
 export const s = {
+  scanAutomatic:'Automatic capture',scanWelcome:'Face the camera. I will guide you through the scan.',scanStartHelp:'Voice guidance starts with the scan. You can mute it at any time.',scanTitle:'Face scan',scanExtraTitle:'Extra angles',scanExample:'Follow this movement',scanStart:'Start scan',
+  scanCues:{front:'Face the camera.',left:'Turn slowly to your left.',right:'Turn slowly to your right.',up:'Raise your chin a little.',down:'Lower your chin a little.',back:'Come back a little.',hold:'Hold here. Taking your photo.',saving:'Hold here. Taking your photo.',recover:'Face the camera so I can find you again.',complete:'Your scan is saved.'},
+  scanProgress:(count:number,total:number)=>`${count} of ${total} angles saved`,
+  scanSummary:'Main scan saved',scanSummaryHelp:'Your photos are safe. Extra side angles and expressions can add variety. This is not the full dataset readiness score.',
+  scanExpressions:'Continue to expressions',scanExtras:'Add extra angles',scanFinish:'Continue with these photos',
+  scanHelp:'Move your head, keep your phone still. Stop when the guide says Hold here.',
+  scanStalled:'Not moving forward? Face the camera, then follow the example slowly. Your saved angles stay saved.',
+  scanOffer:'Take a break or continue with the photos you have. You can revisit missing angles later.',
+  scanMeasurements:'Angle details',scanOptions:'More capture options',scanReturnHelp:'Come back to face the camera before the next movement.',
+
   guidanceVoice:'Guidance voice',voiceAutomatic:'Automatic / prefer a female voice',voiceDevice:'On device',voiceNetwork:'May need internet',voiceChoiceHelp:'Choose the voice you find most natural. Automatic favors recognizable female voice names. Availability and offline speech depend on this device.',voicePreview:'Listen to voice',voiceSelected:(name:string)=>`Current voice: ${name}`,voiceSystem:'System default',
   freeSweepTitle:'Free head scan',freeSweepHelp:'Move slowly left, right, then chin up and down. Pause when green. New angles are collected in any order; a sound confirms a saved photo.',
-  freeSweepEnable:'Use free head scan',freeSweepContinue:'Continue with collected angles',freeSweepLater:'Unfilled angles stay available to revisit; they are not counted as captured.',
+  freeSweepEnable:'Use guided face scan',freeSweepContinue:'Continue with collected angles',freeSweepLater:'Unfilled angles stay available to revisit; they are not counted as captured.',
   handsFreeLeft:'Left profile · hands-free',handsFreeRight:'Right profile · hands-free',handsFreeStart:'Take after countdown',handsFreeCancel:'Cancel countdown',
   handsFreeHelp:'For a side view you cannot watch: start a 7-second voice countdown, turn and hold still. Then face the screen to check the photo. An unreadable angle needs your review.',
   handsFreeReturn:'Photo captured. Face the screen to check it.',handsFreeReturnHelp:'Face the screen. Check the photo below, or resume the scan if it was saved.',

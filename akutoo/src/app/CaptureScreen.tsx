@@ -1,3 +1,5 @@
+import {guidedActive,primaryIds,extraIds} from '../session/guided-scan';
+import {ScanGuide} from './ScanGuide';
 import {sweepActive} from '../session/free-sweep';
 import {SoloEffects} from '../solo/effects';
 import {PoseGuide} from './PoseGuide';
@@ -36,28 +38,37 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
     document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', leaving);
     return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', leaving); value.dispose(); if ('speechSynthesis' in window) speechSynthesis.cancel(); };
   }, [session.id]);
-  const plan = capturePlan(state?.session ?? session), p = state ? captureProgress(state.session) : undefined, shot = state?.retakeFinished ? undefined : state?.session.retakeShotId ? plan.find(shot => shot.id === state.session.retakeShotId) : p ? plan[p.index] : undefined;
+  const plan = capturePlan(state?.session ?? session), p = state ? captureProgress(state.session) : undefined, shot = (state?.retakeFinished || (p?.guidedScan?.group==='summary'&&!p.revisiting&&!state?.session.retakePhotoId&&!state?.session.details?.active)) ? undefined : state?.session.retakeShotId ? plan.find(shot => shot.id === state.session.retakeShotId) : p ? plan[p.index] : undefined;
   const detail = !!state?.session.details?.active, baseline = detail ? state?.session.details?.baseline : state?.session.baseline;
   const guide = shot?.detail ? detailGuide(shot.detail) : null;
   const sourceRatio = (state?.session.stream?.width ?? 3) / (state?.session.stream?.height ?? 4);
+  const guided=!!p&&guidedActive(p)&&!state?.retakeFinished&&!detail&&!state?.session.retakePhotoId;
+  const summary=guided&&p?.guidedScan?.group==='summary';
+  const primary=guided&&p?.guidedScan?.group!=='extra';
+  const displayBins=guided?(primary?primaryIds:extraIds).map(id=>id==='chin-up'?'pitch:-15':id==='chin-down'?'pitch:15':`yaw:${id.slice(5)}`):poseBins;
+  const savedCount=displayBins.filter(bin=>state?.coveredBins.includes(bin)).length;
   const instruction = shot ? s.shotInstruction(shot) : s.sessionComplete;
   const lastSpoken=useRef(-Infinity), lastShot=useRef('');
   const correction=state?.poseCue && state.poseCue!=='manual' ? state.poseCue==='expression' ? instruction : state.poseCue in s.fix ? s.fix[state.poseCue as keyof typeof s.fix] : s.poseCues[state.poseCue as keyof typeof s.poseCues] : null;
-  const spoken=baseline&&correction?correction:instruction;
+  const scanText=state?.scan?s.scanCues[state.scan.cue]:instruction;
+  const scanCorrection=state?.quality?.hardFailure&&state.quality.reason?s.fix[state.quality.reason]:scanText;
+  const speechBlockedByBusy=!guided&&state?.busy;
+  const spoken=guided?(baseline?scanCorrection:s.calibrating):baseline&&correction?correction:instruction;
   useEffect(() => {
     if(!voice){if('speechSynthesis' in window)speechSynthesis.cancel();return;}
     if(state?.countdown!==null&&state?.countdown!==undefined||state?.handsFreeReturning)return;
-    if(!voice||!state?.running||state.paused||state.busy||state.pending||state.loading||state.modelFailed||!('speechSynthesis' in window)) {
+    if(!voice||!state?.running||state.paused||(!guided&&state.busy)||state.pending||state.loading||state.modelFailed||!('speechSynthesis' in window)) {
       if('speechSynthesis' in window) speechSynthesis.cancel();
       return;
     }
-    const changed=lastShot.current!==shot?.id;
+    const speechKey=guided?spoken:shot?.id;
+    const changed=lastShot.current!==speechKey;
     const timer=window.setTimeout(()=>{
-      speakGuidance(changed&&spoken!==instruction?`${instruction} ${spoken}`:spoken,voiceURI);
-      lastSpoken.current=performance.now();lastShot.current=shot?.id??'';
-    },changed?350:speechDelay(performance.now(),lastSpoken.current));
+      speakGuidance(!guided&&changed&&spoken!==instruction?`${instruction} ${spoken}`:spoken,voiceURI);
+      lastSpoken.current=performance.now();lastShot.current=speechKey??'';
+    },guided&&(state?.scan?.status==='holding'||state?.scan?.status==='saving')?0:changed?350:speechDelay(performance.now(),lastSpoken.current));
     return ()=>window.clearTimeout(timer);
-  },[spoken,instruction,shot?.id,voice,voiceURI,state?.running,state?.paused,state?.busy,state?.pending,state?.loading,state?.modelFailed,state?.countdown,state?.handsFreeReturning]);
+  },[spoken,guided,voice,voiceURI,state?.running,state?.paused,speechBlockedByBusy,state?.pending,state?.loading,state?.modelFailed,state?.countdown,state?.handsFreeReturning]);
   useEffect(()=>{
     const count=state?.session.stats?.captures??0;
     if(count>previousCaptures.current)effects.current.tone('capture');
@@ -72,7 +83,7 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
     else if(count===0){speakGuidance(s.handsFreeHold,voiceURI);effects.current.tone('hold');}
   },[state?.countdown,state?.handsFreeReturning,voice,voiceURI]);
   const counting=state?.countdown!==null&&state?.countdown!==undefined;
-  const sweeping=!!p&&sweepActive(p)&&!detail&&!state?.session.retakePhotoId;
+  const sweeping=!!p&&!!shot&&sweepActive(p)&&!state?.retakeFinished&&!detail&&!state?.session.retakePhotoId;
   async function handsFree(yaw?:-90|90){if(!voiceReady)return;window.scrollTo({top:0,behavior:'auto'});setVoice(true);void effects.current.enable();await controller.current?.startHandsFree(yaw);}
   const busy = state?.busy || state?.loading;
   async function leave() {
@@ -84,43 +95,54 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
   const fixing = !!p?.attempts.sessionFix;
   const autoReady=!!state?.autoReady&&!counting&&!busy&&!state.paused&&!state.modelFailed&&!shot?.manual;
   const autoLabel=counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeCount(state?.countdown??0)):state?.busy?s.autoSaving:state?.loading?s.autoPreparing:state?.modelFailed?s.autoUnavailable:state?.paused?s.autoPaused:shot?.manual?s.autoManual:!baseline?s.autoCalibrating:autoReady?s.autoReady:s.autoAlign;
-  const feedback = counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeAway):state?.handsFreeReturning?s.handsFreeReturnHelp:state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || state.quality?.hardFailure) ? state.message : correction??instruction;
-  return <main className={fixing ? 'capture-screen fix-screen' : `capture-screen${shot&&!detail&&shot.stage<=2?' has-pose-guide':''}`}>
+  const feedback = counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeAway):state?.handsFreeReturning?s.handsFreeReturnHelp:state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || state.quality?.hardFailure) ? state.message : guided?scanCorrection:correction??instruction;
+  return <main className={fixing ? 'capture-screen fix-screen' : `capture-screen${guided?' guided-screen':shot&&!detail&&shot.stage<=2?' has-pose-guide':''}${summary?' scan-summary-screen':''}`}>
     <div className={fixing ? 'scan-layout is-hidden' : 'scan-layout'} inert={fixing}>
-    <header className="capture-header"><button className="quiet" onClick={() => void leave()} disabled={!!busy}>{s.finish}</button><span>{p ? s.progress(p.completed.length, plan.length) : s.setupTitle}</span></header>
-    <div className="capture-heading">{!detail && <p>{shot ? s.stage(shot.stage) : s.sessionComplete}</p>}<h1>{sweeping?s.freeSweepTitle:shot ? s.stageNames[shot.stage - 1] : s.sessionComplete}</h1></div>
-    <div className={`${state?.pending?'is-hidden ':''}${counting?'is-counting ':''}${detail?'camera-frame detail-camera':'camera-frame'}`} style={detail ? { aspectRatio: `${sourceRatio}`, width: `min(100%, 400px, ${38 * sourceRatio}svh)` } : undefined}>
+    <header className="capture-header"><button className="quiet" onClick={() => void leave()} disabled={!!busy}>{s.finish}</button><span>{guided?s.scanProgress(savedCount,displayBins.length):p ? s.progress(p.completed.length, plan.length) : s.setupTitle}</span></header>
+    <div className="capture-heading">{!detail&&!guided && <p>{shot ? s.stage(shot.stage) : s.sessionComplete}</p>}<h1>{guided?(primary?s.scanTitle:s.scanExtraTitle):sweeping?s.freeSweepTitle:shot ? s.stageNames[shot.stage - 1] : s.sessionComplete}</h1></div>
+    <div className={`scan-visual${summary?' is-hidden':''}`}><div className={`${state?.pending?'is-hidden ':''}${counting?'is-counting ':''}${detail?'camera-frame detail-camera':'camera-frame'}`} style={detail ? { aspectRatio: `${sourceRatio}`, width: `min(100%, 400px, ${38 * sourceRatio}svh)` } : undefined}>
       <video ref={video} autoPlay muted playsInline className={state?.camera === 'user' ? 'mirror' : ''} />
-      {guide ? <div className="detail-guide" role="img" aria-label={s.detailGuide} style={{ left: `${guide.x * 100}%`, top: `${guide.y * 100}%`, width: `${guide.width * 100}%`, height: `${guide.height * 100}%` }}/> : <svg className="scan-ring" viewBox="0 0 300 400" role="img" aria-label={s.coverageCount(state?.coveredBins.length ?? 0, poseBins.length)}>{poseBins.map((bin, segment) => {
+      {guide ? <div className="detail-guide" role="img" aria-label={s.detailGuide} style={{ left: `${guide.x * 100}%`, top: `${guide.y * 100}%`, width: `${guide.width * 100}%`, height: `${guide.height * 100}%` }}/> : <svg className="scan-ring" viewBox="0 0 300 400" role="img" aria-label={s.coverageCount(savedCount, displayBins.length)}>{displayBins.map((bin, segment) => {
         const complete = state?.coveredBins.includes(bin);
-        const a = segment / poseBins.length * Math.PI * 2 - Math.PI / 2, b = (segment + .78) / poseBins.length * Math.PI * 2 - Math.PI / 2;
+        const a = segment / displayBins.length * Math.PI * 2 - Math.PI / 2, b = (segment + .78) / displayBins.length * Math.PI * 2 - Math.PI / 2;
         return <path key={bin} data-pose-bin={bin} d={`M ${150 + 120 * Math.cos(a)} ${200 + 170 * Math.sin(a)} A 120 170 0 0 1 ${150 + 120 * Math.cos(b)} ${200 + 170 * Math.sin(b)}`} className={complete ? 'complete' : ''} />;
       })}</svg>}
-      {shot&&!detail&&shot.stage<=2&&<PoseGuide shot={shot} pose={state?.running&&!state.paused?state.result?.pose??null:null} ready={autoReady} mirror={state?.camera==='user'}/>}
+      {!guided&&shot&&!detail&&shot.stage<=2&&<PoseGuide shot={shot} pose={state?.running&&!state.paused?state.result?.pose??null:null} ready={autoReady} mirror={state?.camera==='user'}/>}
       {counting&&<div className="handsfree-countdown" data-hold={state?.countdown===0?'true':'false'} role="status"><strong>{state?.countdown||s.handsFreeHoldLabel}</strong><p>{state?.countdown===0?s.handsFreeHold:s.handsFreePose(shot?.yaw??0)}</p></div>}
       {!state?.running && <div className="camera-placeholder"><p>{s.scanIntro}</p></div>}
     </div>
+    {guided&&!summary&&!counting&&!state?.pending&&<ScanGuide target={state?.scan?.target} status={state?.scan?.status??'turning'} cue={state?.scan?.cue??'front'} mirror={state?.camera==='user'} active={!!state?.running&&!state.paused&&!!baseline&&!state.modelFailed&&!state.quality?.hardFailure}/>}
+    </div>
     <section className="capture-controls">
+      {summary&&<section className="scan-summary"><h2>{s.scanSummary}</h2><p>{s.scanProgress(savedCount,displayBins.length)}</p><p>{s.scanSummaryHelp}</p><button className="primary" onClick={()=>void controller.current?.chooseGroup('expressions')}>{s.scanExpressions}</button><button className="quiet" onClick={()=>void controller.current?.chooseGroup('extra')}>{s.scanExtras}</button><button className="quiet" onClick={()=>void leave()}>{s.review}</button></section>}
+      <div className={summary?'is-hidden':undefined}>
       {state?.running&&!state.pending&&<div className={autoReady?'auto-status is-ready':'auto-status'} data-ready={autoReady?'true':'false'}><p role="status">{autoLabel}</p>{!counting&&!shot?.manual&&!state.modelFailed&&baseline&&<div role="progressbar" aria-label={s.autoHoldProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((state.holdProgress??0)*100)} className="auto-hold"><span style={{width:`${Math.round((state.holdProgress??0)*100)}%`}}/></div>}</div>}
       {detail && shot && <p className="instruction">{instruction}</p>}
       {(!detail || feedback !== instruction) && <p className={detail ? 'capture-note' : 'instruction'} aria-live="polite">{feedback}</p>}
       {detail && <details className="detail-tips"><summary>{s.detailPhotoTips}</summary><p className="capture-note">{s.detailHelp}</p></details>}
       {state?.running && !state.pending && !baseline && !state.modelFailed && <p role="status">{s.calibrationTime(state.seconds)}</p>}
-      {!counting&&!state?.paused&&!state?.pending&&shot&&!shot.manual&&!detail&&shot.stage<=2&&<p className="capture-note">{s.poseFollow}</p>}
-      {!state?.running && shot && <><label className="field">{s.camera}<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)} disabled={!!busy}><option value="user">{s.front}</option><option value="environment">{s.rear}</option></select></label><button className="primary" disabled={!!busy} onClick={() => {void effects.current.enable();void controller.current?.start(camera);}}>{state?.loading ? s.cameraLoading : s.startCamera}</button></>}
+      {!guided&&!counting&&!state?.paused&&!state?.pending&&shot&&!shot.manual&&!detail&&shot.stage<=2&&<p className="capture-note">{s.poseFollow}</p>}
+      {!state?.running && shot && <><label className="field">{s.camera}<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)} disabled={!!busy}><option value="user">{s.front}</option><option value="environment">{s.rear}</option></select></label><button className="primary" disabled={!!busy} onClick={() => {void effects.current.enable();if(guided){setVoice(true);speakGuidance(s.scanWelcome,voiceURI);}void controller.current?.start(camera);}}>{state?.loading ? s.cameraLoading : guided?s.scanStart:s.startCamera}</button>{guided&&<p className="capture-note">{s.scanStartHelp}</p>}</>}
       {state?.running && <>
-        {!state.pending&&<div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!busy}>{state.paused ? s.resume : s.pause}</button>{counting?<button className="quiet" disabled={!!busy} onClick={()=>{controller.current?.cancelCountdown();controller.current?.pause();}}>{s.handsFreeCancel}</button>:<button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending || counting}><span /></button>}<button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>}
-      {sweeping&&state?.running&&!state.pending&&!counting&&<p className="sweep-instruction">{s.freeSweepHelp}<span>{s.sweepProgress(state.coveredBins.length)}</span></p>}
-        {!state.pending&&<p className="capture-note">{s.reviewNeeded}</p>}
+        {!state.pending&&<div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!busy}>{state.paused ? s.resume : s.pause}</button>{guided&&!counting?<span className="auto-capture-mark" aria-label={s.scanAutomatic}><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="7"/></svg></span>:counting?<button className="quiet" disabled={!!busy} onClick={()=>{controller.current?.cancelCountdown();controller.current?.pause();}}>{s.handsFreeCancel}</button>:<button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending || counting}><span /></button>}<button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>}
+      {!guided&&sweeping&&state?.running&&!state.pending&&!counting&&<p className="sweep-instruction">{s.freeSweepHelp}<span>{s.sweepProgress(state.coveredBins.length)}</span></p>}
+        {!guided&&!state.pending&&<p className="capture-note">{s.reviewNeeded}</p>}
         {busy && <p role="status">{s.saving}</p>}
         {shot?.manual && <p>{s.manualHint}</p>}
-        {!state.pending&&!counting&&!state.paused&&!detail&&shot&&<section className="handsfree-tools">
-          {sweeping?<><div className="handsfree-buttons"><button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)||p?.completed.includes('turn--90')||p?.missed.includes('turn--90')} onClick={()=>void handsFree(-90)}>{s.handsFreeLeft}</button><button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)||p?.completed.includes('turn-90')||p?.missed.includes('turn-90')} onClick={()=>void handsFree(90)}>{s.handsFreeRight}</button></div><p className="capture-note">{s.handsFreeHelp}</p><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.finishFreeSweep()}>{s.freeSweepContinue}</button><p className="capture-note">{s.freeSweepLater}</p></>:<button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)} onClick={()=>void handsFree()}>{s.handsFreeStart}</button>}
+        {!state.pending&&!counting&&!state.paused&&!detail&&shot&&(!guided||!primary)&&<section className="handsfree-tools">
+          {sweeping?<><div className="handsfree-buttons"><button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)||p?.completed.includes('turn--90')||p?.missed.includes('turn--90')} onClick={()=>void handsFree(-90)}>{s.handsFreeLeft}</button><button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)||p?.completed.includes('turn-90')||p?.missed.includes('turn-90')} onClick={()=>void handsFree(90)}>{s.handsFreeRight}</button></div>{guided&&<button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)} onClick={()=>void handsFree()}>{s.handsFreeStart}</button>}<p className="capture-note">{s.handsFreeHelp}</p><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.finishFreeSweep()}>{s.freeSweepContinue}</button><p className="capture-note">{s.freeSweepLater}</p></>:<button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)} onClick={()=>void handsFree()}>{s.handsFreeStart}</button>}
         </section>}
-        {p&&!p.freeSweep&&shot&&shot.stage<=2&&!state.pending&&!detail&&!state.session.retakePhotoId&&<button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.enableFreeSweep()}>{s.freeSweepEnable}</button>}
+        {p&&!guided&&shot&&shot.stage<=2&&!state.pending&&!detail&&!state.session.retakePhotoId&&<button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.enableFreeSweep()}>{s.freeSweepEnable}</button>}
 
-        {!counting&&!state.pending&&shot&&!shot.manual&&<p className="capture-note">{s.poseFallback}</p>}
-        {!state.pending && !p?.attempts.sessionFix && <div className="skip-controls"><label className="field">{s.skipReason}<select value={reason} onChange={event => setReason(event.target.value)}>{Object.entries(s.skipOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button className="quiet" disabled={!!busy||counting} onClick={() => void controller.current?.skip(reason)}>{s.nextPose}</button></div>}
+        {!guided&&!counting&&!state.pending&&shot&&!shot.manual&&<p className="capture-note">{s.poseFallback}</p>}
+        {!guided&&!state.pending && !p?.attempts.sessionFix && <div className="skip-controls"><label className="field">{s.skipReason}<select value={reason} onChange={event => setReason(event.target.value)}>{Object.entries(s.skipOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button className="quiet" disabled={!!busy||counting} onClick={() => void controller.current?.skip(reason)}>{s.nextPose}</button></div>}
+      </>}
+      {guided&&state?.running&&!state.pending&&!counting&&<>
+        <p className="capture-note">{s.scanHelp}</p>
+        {state.stall!=='none'&&<p className="scan-stall" role="status">{state.stall==='offer'?s.scanOffer:state.quality?.reason?s.fix[state.quality.reason]:s.scanStalled}</p>}
+        <button className="quiet scan-continue" disabled={!!busy} onClick={()=>void controller.current?.chooseGroup('summary')}>{s.scanFinish}</button>
+        <details className="scan-options"><summary>{s.scanOptions}</summary><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.capture()}>{s.capture}</button><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.skip('later')}>{s.nextPose}</button><p>{s.reviewNeeded}</p></details>
+        <details className="scan-options"><summary>{s.scanMeasurements}</summary><p>{state.result?.pose?s.poseLive(state.result.pose.yaw,state.result.pose.pitch):s.poseWaiting}</p></details>
       </>}
       {state?.pending && <section className="pending-photo"><h2>{s.pendingTitle}</h2><img src={state.pending.url} alt={s.pendingTitle}/><p>{state.message}</p><p>{s.pendingHelp}</p><button className="primary" disabled={!!busy} onClick={() => void controller.current?.keepAnyway()}>{s.keepAnyway}</button><button className="quiet" disabled={!!busy} onClick={() => void controller.current?.retryCapture()}>{p?.attempts.promptRetake === false || p?.attempts.moveOn ? s.skip : s.discard}</button></section>}
       {!shot && state && <section><p>{s.sessionCompleteHelp}</p>{p && !p.revisiting && p.missed.length > 0 && <button className="primary" onClick={() => void controller.current?.revisit()}>{s.revisit}</button>}<button className="quiet" onClick={() => void leave()}>{s.review}</button></section>}
@@ -128,6 +150,7 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
       {state?.message === s.cameraError || state?.message === s.saveError || state?.message === s.sessionChanged ? <p role="alert">{state.message}</p> : null}
       {leaveError && <p role="alert">{leaveError}</p>}
       {state?.message === s.earlierKept && <p role="status">{s.earlierKept}</p>}
+      </div>
     </section>
     </div>
     {fixing && state && <section className="session-fix" role="alert"><h1>{s.sessionFixTitle}</h1><p>{state.message}</p><p>{s.safePhotos(p?.savedIds.length ?? 0)}</p><button className="primary" disabled={!!busy} onClick={() => void controller.current?.checkAgain()}>{s.checkAgain}</button><button className="quiet" disabled={!!busy} onClick={() => void controller.current?.skip('failed')}>{s.keepGoing}</button>{state.pending && <><p className="capture-note">{s.pendingHelp}</p><button className="quiet" disabled={!!busy} onClick={() => void controller.current?.keepAnyway()}>{s.keepAnyway}</button></>}<button className="quiet" disabled={!!busy} onClick={() => void leave()}>{s.finish}</button></section>}
