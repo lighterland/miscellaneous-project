@@ -25,6 +25,7 @@ export interface Photo {
   fulfilledShotIds?: string[];
   poseConvention?: 'subject-left-negative-v2';
   captureTrigger?:'manual'|'automatic'|'countdown';
+  gaze?:{direction:'left'|'right'|'up'|'down'|null;method:'blendshapes-v1';coefficients:Record<string,number>};
   streamDimensions?: { width: number; height: number };
   hair?:HairPhoto;
   body?:BodyPhoto;

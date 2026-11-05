@@ -5,6 +5,11 @@ import type { Photo, Session } from '../../src/storage/db';
 const session: Session = { id: 'session-1', label: 'Face scan', createdAt: 1, updatedAt: 2, mode: 'face', preset: 'general', status: 'review', stage: 1 };
 const good: Photo = { id: 'photo-1', sessionId: session.id, width: 2160, height: 3840, createdAt: 1, opfsPath: 'sessions/session-1/photo-1.jpg', shotId: 'turn--30', pose: { yaw: -33, pitch: 0, roll: 0 }, requestedYaw: -30, quality: { score: 90, tier: 'A', hardFailure: false, reason: null }, measurements: { faceCount: 1, occluded: false, occlusionVerified: true, headCutOff: false, sharpness: 100, clipped: .01, exposure: 100, faceRatio: .5, shortSide: 2160, angleError: 3, expressionMatch: 1 }, override: false };
 describe('dataset export', () => {
+  it('keeps measured gaze separate from requested direction and leaves old evidence unknown',()=>{
+    expect(datasetMetadata(session,[good],'all').images[0].gaze).toBeNull();
+    const gaze:NonNullable<Photo['gaze']>={direction:null,method:'blendshapes-v1',coefficients:{eyeLookOutLeft:.1}};
+    expect(datasetMetadata(session,[{...good,direction:'left',gaze}],'all').images[0]).toMatchObject({direction:'left',gaze});
+  });
   it('excludes risky, unverified and lower-tier photos from Recommended', () => {
     const photos = [good, { ...good, id: 'risky', override: true }, { ...good, id: 'unknown', measurements: undefined }, { ...good, id: 'tier-c', quality: { ...good.quality!, tier: 'C' as const } }];
     expect(exportable(photos, 'recommended').map(photo => photo.id)).toEqual(['photo-1']);

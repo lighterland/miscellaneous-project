@@ -10,6 +10,14 @@ Guided sweep photos use the actual stream dimensions with method canvas. On Sams
 
 ## Guidance and recovery
 
+### S24 follow-up
+
+Guided head tracking now continues while a selected JPEG is encoded and written. One sequential consumer owns save progress; up to two later candidates may wait, with reserved bins excluded from reacquisition. The queue is cleared on pause, interruption or failure and never awards coverage before durable storage. Queue overflow drops a transient candidate, leaving that angle unfilled for another sweep. This bounds retained work but does not certify native 4K peak memory or eliminate all model latency.
+
+Eye-direction shots are now automatic when both eyes provide clear subject-relative blendshape evidence. Missing coefficients, blinks and ambiguous directions do not trigger. The final JPEG is checked again, including a sensor still if selected. Export preserves measured gaze separately from requested direction; old photos have no invented gaze measurements. Gesture defaults are provisional; see S24_CAPTURE_FOLLOWUP.md.
+
+On supported devices, one short vibration confirms a newly saved photo and a double vibration requests a return toward the camera. Returning to an existing session does not reconfirm historical photos. Return pulses are limited to one pattern per three seconds; visual and audio guidance remain available if vibration is unsupported or blocked. Guided Pause remains available while a background save finishes; waiting candidates are cleared.
+
 The suggested target is the end of a left/right sweep, independent of the individual bins being collected. Primary movement goes front, left, front, right, front, chin up and down. Extra movement goes left, front, right. The example and voice share the same cue during collection and saving; they do not ask for a stop at each bin. A green collecting label means a frame currently meets requirements; orange ring segments, count and confirmation tone represent saved photos only.
 
 The large code-native diagram sits beside the camera on phone and desktop without covering the face. Movement steps show the current phase. Automatic capture is plain text, not a false shutter button. Reduced-motion disables the example animation.

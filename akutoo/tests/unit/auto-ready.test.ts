@@ -2,6 +2,12 @@ import {it,expect} from 'vitest';
 import {autoCaptureReady} from '../../src/capture/auto-ready';
 import {shots} from '../../src/session/shotlist';
 const base={shot:shots[1],pose:{yaw:-15,pitch:0,roll:0},quality:{score:60,tier:'C' as const,hardFailure:false,reason:null},velocity:0,faceRatio:.5,expression:1};
+it('automatically accepts measured eye directions without a shutter, but not absent or opposite evidence',()=>{
+ const gaze={...base,shot:shots.find(s=>s.id==='gaze-left')!,pose:{yaw:0,pitch:0,roll:0},blendshapes:{eyeLookOutLeft:.8,eyeLookInRight:.8,eyeLookInLeft:0,eyeLookOutRight:0,eyeLookUpLeft:0,eyeLookUpRight:0,eyeLookDownLeft:0,eyeLookDownRight:0,eyeBlinkLeft:0,eyeBlinkRight:0}};
+ expect(autoCaptureReady(gaze)).toBe(true);
+ expect(autoCaptureReady({...gaze,blendshapes:{}} as typeof gaze)).toBe(false);
+ expect(autoCaptureReady({...gaze,shot:shots.find(s=>s.id==='gaze-right')!})).toBe(false);
+});
 it('can acquire a usable turn while frame-to-frame pose jitters and soft targets are imperfect',()=>{
  expect(autoCaptureReady({...base,velocity:20,faceRatio:.30,expression:.7})).toBe(true);
 });

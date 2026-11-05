@@ -15,6 +15,7 @@ export function poseGuidance(input: {shot:Shot;pose:AnalysisResult['pose'];quali
   const yaw=shot.yaw-pose.yaw,pitch=shot.pitch-pose.pitch;
   if(Math.abs(yaw)>7) return yaw<0?'left':'right';
   if(Math.abs(pitch)>7) return pitch<0?'up':'down';
+  if(shot.direction) return 'expression';
   if(!turn&&expression<.8) return 'expression';
   if(quality.tier==='D') return 'quality';
   if(!turn&&velocity>=8) return 'steady';

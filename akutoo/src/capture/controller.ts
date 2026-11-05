@@ -6,6 +6,7 @@ import {poseGuidance, type PoseCue} from './pose-guidance';
 import { AnalysisClient } from '../analysis/client';
 import type { AnalysisResult } from '../analysis/protocol';
 import { expressionMatch } from '../analysis/expressions';
+import {measuredGaze} from '../analysis/gaze';
 import { poseBin } from '../analysis/metrics';
 import { calibrate, evaluateQuality, type QualityResult } from '../gates/quality';
 import { s } from '../i18n/strings.en';
@@ -19,6 +20,7 @@ import { SessionConflict } from '../storage/recovery-plan';
 import { BrowserCamera, jpeg, thumbnail, type CameraSource } from './camera';
 import { preferStill } from './still-selection';
 import {offerFrame,measuredTarget,type FrameWindow} from './rolling-burst';
+import {FrameQueue} from './frame-queue';
 import { capturePlan, captureProgress, detailGuide, detailMeasurements, syncDetailBudget } from '../details/plan';
 import { saveDetailCapture } from '../storage/details';
 
@@ -43,6 +45,9 @@ export class CaptureController {
   private activeWithoutSave=0;
   private lastActiveTick:number|null=null;
   private frames:FrameWindow<SweepFrame>|null=null;
+  private queued=new FrameQueue<SweepFrame>(2,frame=>{frame.canvas.width=0;});
+  private processing=false;
+  private savingIndex:number|null=null;
   private lastSweepYaw=0;
   private lostSince:number|null=null;
   private previousPose: { yaw: number; pitch: number; time: number } | null = null;
@@ -65,7 +70,7 @@ export class CaptureController {
   }
   private get plan() { return capturePlan(this.state.session); }
   private get continuous() {return guidedActive(this.progress)&&this.progress.guidedScan?.group!=='summary'&&!this.state.session.details?.active&&!this.state.session.retakePhotoId;}
-  private clearFrames(){if(this.frames)this.frames.best.canvas.width=0;this.frames=null;this.lostSince=null;this.lastSweepYaw=0;}
+  private clearFrames(){if(this.frames)this.frames.best.canvas.width=0;this.frames=null;this.queued.clear();this.lostSince=null;this.lastSweepYaw=0;}
   private get progress() { return captureProgress(this.state.session); }
   private set progress(value) { if (this.state.session.details?.active) this.state.session.details.progress = value; else this.state.session.progress = value; }
   private get baseline() { return this.state.session.details?.active ? this.state.session.details.baseline : this.state.session.baseline; }
@@ -115,9 +120,9 @@ export class CaptureController {
     if(active&&this.lastActiveTick!==null)this.activeWithoutSave+=Math.min(1000,tickNow-this.lastActiveTick);
     this.lastActiveTick=active?tickNow:null;this.state.stall=stallLevel(this.activeWithoutSave);
     const attempts = this.progress.attempts, elapsed = elapsedAttempts(attempts, Date.now());
-    if (attempts !== elapsed) { this.progress.attempts = elapsed; try { await this.persist(); } catch (error) { this.state.message = error instanceof SessionConflict ? s.sessionChanged : s.saveError; this.emit(); } }
+    if (!this.state.busy&&attempts !== elapsed) { this.progress.attempts = elapsed; try { await this.persist(); } catch (error) { this.state.message = error instanceof SessionConflict ? s.sessionChanged : s.saveError; this.emit(); } }
     if (generation !== this.generation) return;
-    if (this.state.paused || this.state.busy || this.state.pending || this.state.countdown!==null || !this.analysis || !this.shot) { this.schedule(generation); return; }
+    if (this.state.paused || (this.state.busy&&!this.processing) || this.state.pending || this.state.countdown!==null || !this.analysis || !this.shot) { this.schedule(generation); return; }
     let sampled:HTMLCanvasElement|undefined;
     try {
       this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
@@ -125,7 +130,7 @@ export class CaptureController {
       if(this.continuous&&this.baseline)sampled=this.camera.frame();
       const result = await this.measure(sampled??this.video);
       if (generation !== this.generation) return;
-      if(this.state.countdown!==null||this.state.paused||this.state.pending||this.state.busy){this.schedule(generation);return;}
+      if(this.state.countdown!==null||this.state.paused||this.state.pending||(this.state.busy&&!this.processing)){this.schedule(generation);return;}
       this.state.result = result;
       const now = performance.now();
       if(sampled&&this.baseline){await this.collectFrame(sampled,result,generation);sampled=undefined;this.emit();this.schedule(generation);return;}
@@ -151,7 +156,7 @@ export class CaptureController {
         const pose = result.pose;
         const velocity = pose && this.previousPose ? Math.hypot(pose.yaw - this.previousPose.yaw, pose.pitch - this.previousPose.pitch) * 1000 / Math.max(1, now - this.previousPose.time) : Infinity;
         this.previousPose = pose ? { ...pose, time: now } : null;
-        const ready = autoCaptureReady({shot:this.shot,pose,quality,velocity,faceRatio:m.faceRatio,expression:expressionMatch(result.blendshapes,this.shot.expression)});
+        const ready = autoCaptureReady({shot:this.shot,pose,quality,velocity,faceRatio:m.faceRatio,expression:expressionMatch(result.blendshapes,this.shot.expression),blendshapes:result.blendshapes});
         this.state.poseCue=poseGuidance({shot:this.shot,pose,quality,faceRatio:m.faceRatio,expression:expressionMatch(result.blendshapes,this.shot.expression),velocity,ready});
         this.hold = startHold(this.hold, ready, now);
         this.state.autoReady=ready;this.state.holdProgress=this.hold===null?0:Math.min(1,(now-this.hold)/500);
@@ -165,6 +170,9 @@ export class CaptureController {
   }
   private async collectFrame(canvas:HTMLCanvasElement,result:AnalysisResult,generation:number){
     const previousGuide=this.progress.guidedScan;
+    // A save owns persisted progress. Live tracking may collect pixels, but must
+    // not race its revision or move its target slot while that transaction runs.
+    if(!this.processing){
     if(result.pose){this.lastSweepYaw=result.pose.yaw;this.lostSince=null;}
     else {
       this.lostSince??=performance.now();
@@ -173,8 +181,11 @@ export class CaptureController {
     }
     this.progress=updateGuide(this.progress,result.pose);
     if(previousGuide!==this.progress.guidedScan)await this.persist();
-    if(generation!==this.generation||this.state.paused||this.state.busy||this.state.countdown!==null){canvas.width=0;return;}
-    const index=selectSweepShot(this.progress,result.pose);
+    }
+    if(generation!==this.generation||this.state.paused||(this.state.busy&&!this.processing)||this.state.countdown!==null){canvas.width=0;return;}
+    const reserved=[...this.queued.indices(),...(this.savingIndex===null?[]:[this.savingIndex])];
+    const selection={...this.progress,completed:[...this.progress.completed,...reserved.map(index=>this.plan[index].id)]};
+    const index=selectSweepShot(selection,result.pose);
     const target=index===null?this.shot:this.plan[index];
     const quality=target?this.grade(result,target):{score:0,tier:'D' as const,hardFailure:true,reason:'invalid' as const};
     this.state.quality=quality;
@@ -187,9 +198,25 @@ export class CaptureController {
     if(batch.ready){
       const ready=batch.ready;
       if(generation!==this.generation||this.state.paused){ready.canvas.width=0;this.clearFrames();return;}
-      this.progress={...this.progress,index:ready.index};
-      await this.capture(false,ready);
-      if(this.state.paused||generation!==this.generation)this.clearFrames();
+      this.queued.offer(ready);
+      void this.drainFrames(generation);
+    }
+  }
+  private async drainFrames(generation:number){
+    if(this.processing||this.state.busy)return;
+    this.processing=true;
+    try{
+      while(generation===this.generation&&!this.state.paused&&this.state.running&&!this.state.pending){
+        const frame=this.queued.take();if(!frame)break;
+        const id=this.plan[frame.index].id;
+        if(this.progress.completed.includes(id)||this.progress.missed.includes(id)){frame.canvas.width=0;continue;}
+        this.savingIndex=frame.index;this.progress={...this.progress,index:frame.index};
+        await this.capture(false,frame);
+        this.savingIndex=null;
+      }
+    }finally{
+      this.processing=false;this.savingIndex=null;
+      if(generation!==this.generation||this.state.paused||!this.state.running)this.clearFrames();
     }
   }
   private grade(result: AnalysisResult, shot: Shot): QualityResult {
@@ -249,9 +276,14 @@ export class CaptureController {
       interrupted();
       const thumb = await jpeg(thumbnail(best.canvas));
       interrupted();
+      // Check the final selected JPEG, including a sensor still if one replaced it.
+      if(!manual&&shot.direction&&(!measuredTarget(shot,best.result?.pose??null)||measuredGaze(best.result?.blendshapes??{})!==shot.direction)){
+        this.state.message=s.shotInstruction(shot);return;
+      }
       const id = crypto.randomUUID();
       const photo: Photo = { id, sessionId: this.state.session.id, opfsPath: `sessions/${this.state.session.id}/${id}.jpg`, thumbPath: `thumbs/${id}.jpg`, width: best.canvas.width, height: best.canvas.height, createdAt: Date.now(), source: 'captured', shotId: shot.id,
         binId: !shot.detail && best.result?.pose ? poseBin(best.result.pose.yaw, best.result.pose.pitch) : undefined, pose: best.result?.pose ?? null, poseConvention: best.result?.pose ? 'subject-left-negative-v2' : undefined, captureTrigger:this.state.countdown!==null?'countdown':manual?'manual':'automatic', quality: best.quality, measurements: best.result ? this.metrics(best.result) ?? undefined : undefined, hash: shot.detail ? null : best.result?.hash ?? null, camera: this.state.camera, method, override: false,
+        ...(shot.direction?{gaze:{direction:measuredGaze(best.result?.blendshapes??{}),method:'blendshapes-v1' as const,coefficients:Object.fromEntries(Object.entries(best.result?.blendshapes??{}).filter(([key])=>key.startsWith('eyeLook')||key.startsWith('eyeBlink')))}}:{}),
         streamDimensions: this.state.session.stream ? { ...this.state.session.stream } : undefined, requestedYaw: shot.detail ? undefined : shot.yaw, requestedPitch: shot.detail ? undefined : shot.pitch, expression: shot.expression, direction: shot.direction, context: shot.context, relaxed: this.progress.attempts.relaxed,
         bestAttempt: this.progress.attempts.slotAttempts >= 2 && best.quality.tier === 'C', baseline: this.baseline ? { ...this.baseline } : undefined, ratios: shot.detail ? null : best.result?.ratios ?? null,
         ...(shot.detail ? { detail: { instruction: shot.detail, target: best.result?.target ?? null, faceMeasurements: best.result?.measurements ?? null, reviewed: false } } : {}) };

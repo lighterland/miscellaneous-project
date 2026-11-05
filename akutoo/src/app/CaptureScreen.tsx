@@ -6,6 +6,7 @@ import {PoseGuide} from './PoseGuide';
 import {speechDelay} from '../capture/pose-guidance';
 import {speakGuidance} from '../audio/guidance';
 import { useEffect, useRef, useState } from 'react';
+import {haptic} from '../audio/haptics';
 import { CaptureController, type CaptureState } from '../capture/controller';
 import { poseBins } from '../session/coverage';
 import type { Session } from '../storage/db';
@@ -70,10 +71,17 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
     return ()=>window.clearTimeout(timer);
   },[spoken,guided,voice,voiceURI,state?.running,state?.paused,speechBlockedByBusy,state?.pending,state?.loading,state?.modelFailed,state?.countdown,state?.handsFreeReturning]);
   useEffect(()=>{
+    if(!state)return;
     const count=state?.session.stats?.captures??0;
-    if(count>previousCaptures.current)effects.current.tone('capture');
+    if(count>previousCaptures.current){effects.current.tone('capture');haptic('saved');}
     previousCaptures.current=count;
   },[state?.session.stats?.captures]);
+  const returnHaptic=useRef(false),lastReturnHaptic=useRef(-Infinity);
+  useEffect(()=>{
+    const returning=!!state?.running&&!state.paused&&!!baseline&&!!state.scan&&(state.scan.cue==='recover'||state.scan.cue==='back'||p?.guidedScan?.phase.startsWith('return')===true);
+    if(returning&&!returnHaptic.current&&performance.now()-lastReturnHaptic.current>=3000){haptic('return');lastReturnHaptic.current=performance.now();}
+    returnHaptic.current=returning;
+  },[state?.running,state?.paused,state?.scan?.cue,p?.guidedScan?.phase,baseline]);
   useEffect(()=>{
     if(!voice)return;
     const count=state?.countdown;
@@ -125,7 +133,7 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
       {!guided&&!counting&&!state?.paused&&!state?.pending&&shot&&!shot.manual&&!detail&&shot.stage<=2&&<p className="capture-note">{s.poseFollow}</p>}
       {!state?.running && shot && <><label className="field">{s.camera}<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)} disabled={!!busy}><option value="user">{s.front}</option><option value="environment">{s.rear}</option></select></label><button className="primary" disabled={!!busy} onClick={() => {void effects.current.enable();if(guided){setVoice(true);speakGuidance(s.scanWelcome,voiceURI);}void controller.current?.start(camera);}}>{state?.loading ? s.cameraLoading : guided?s.scanStart:s.startCamera}</button>{guided&&<p className="capture-note">{s.scanStartHelp}</p>}</>}
       {state?.running && <>
-        {!state.pending&&<div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!busy}>{state.paused ? s.resume : s.pause}</button>{guided&&!counting?<span className="auto-capture-mark">{s.scanAutomatic}</span>:counting?<button className="quiet" disabled={!!busy} onClick={()=>{controller.current?.cancelCountdown();controller.current?.pause();}}>{s.handsFreeCancel}</button>:<button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending || counting}><span /></button>}<button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>}
+        {!state.pending&&<div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!state.loading || (!!state.busy&&!guided)}>{state.paused ? s.resume : s.pause}</button>{guided&&!counting?<span className="auto-capture-mark">{s.scanAutomatic}</span>:counting?<button className="quiet" disabled={!!busy} onClick={()=>{controller.current?.cancelCountdown();controller.current?.pause();}}>{s.handsFreeCancel}</button>:<button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending || counting}><span /></button>}<button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>}
       {!guided&&sweeping&&state?.running&&!state.pending&&!counting&&<p className="sweep-instruction">{s.freeSweepHelp}<span>{s.sweepProgress(state.coveredBins.length)}</span></p>}
         {!guided&&!state.pending&&<p className="capture-note">{s.reviewNeeded}</p>}
         {busy && !guided && <p role="status">{s.saving}</p>}

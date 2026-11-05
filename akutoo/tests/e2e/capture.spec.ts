@@ -31,8 +31,11 @@ async function injectAnalysis(page: Page, unavailable = false, snapshotPose = fa
         if(snapshotPose){const c=new OffscreenCanvas(1,1),ctx=c.getContext('2d')!;ctx.drawImage(message.bitmap,20,20,1,1,0,0,1,1);const rgb=ctx.getImageData(0,0,1,1).data;if(Math.abs(rgb[2]-222)<4)snapshot={yaw:rgb[0]-100,pitch:rgb[1]-100,roll:0};}
         message.bitmap.close();
         const fixture = (window as any).fixture;
+        if(!message.still)(window as any).liveMeasurements=((window as any).liveMeasurements??0)+1;
+        else (window as any).stillMeasurements=((window as any).stillMeasurements??0)+1;
         const result = { measurements: { faceCount: fixture.faceCount??1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: fixture.faceRatio ?? .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: 'pose' in fixture?fixture.pose:{ yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
         if(snapshot)result.pose=snapshot;
+        if(message.still&&fixture.stillBlendshapes)result.blendshapes=fixture.stillBlendshapes;
         setTimeout(() => this.onmessage?.({ data: { id: message.id, type: 'result', result } }), fixture.delay??5);
       }
       terminate() {}
@@ -110,6 +113,23 @@ test.describe('Android sensor-photo selection', () => {
     await expect(page.getByRole('button', { name:'Start camera', exact:true })).toBeEnabled();
     expect(await photoInfo(page)).toBeNull();
   });
+});
+
+test('live tracking continues while a guided photo waits for durable storage',async({page})=>{
+ test.setTimeout(60000);await injectAnalysis(page,false,true);await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ await page.evaluate(()=>{
+  const close=FileSystemWritableFileStream.prototype.close;let delay=true;
+  FileSystemWritableFileStream.prototype.close=async function(){await close.call(this);if(delay){delay=false;await new Promise<void>(resolve=>{(window as any).releaseWrite=resolve;});}};
+  (window as any).fixture.pose={yaw:-15,pitch:0,roll:0};
+ });
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).releaseWrite)).toBe('function');
+ const before=await page.evaluate(()=>(window as any).liveMeasurements);
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:-30,pitch:0,roll:0};});
+ await expect.poll(()=>page.evaluate(()=>(window as any).liveMeasurements),{timeout:1500}).toBeGreaterThan(before+2);
+ expect((await photoInfo(page))?.count).toBe(1);
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:-45,pitch:0,roll:0};(window as any).releaseWrite();});
+ await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBeGreaterThanOrEqual(3);
 });
 test.describe('iOS stream capture', () => {
   test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Version/26.6.1 Mobile/15E148 Safari/604.1' });
@@ -732,6 +752,7 @@ test('guided scan recovery, pause and stalled help preserve saved evidence',asyn
 });
 
 test('extra sweep recovers from untrackable profiles and finishes with honest partial coverage',async({page})=>{
+ await page.addInitScript(()=>{(window as any).vibrations=[];Object.defineProperty(navigator,'vibrate',{configurable:true,value:(pattern:any)=>{(window as any).vibrations.push(pattern);return true;}});});
  test.setTimeout(90000);await injectAnalysis(page);await page.setViewportSize({width:390,height:844});await openCamera(page,true);
  await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
  await page.getByRole('button',{name:'Continue with these photos',exact:true}).click();
@@ -744,6 +765,7 @@ test('extra sweep recovers from untrackable profiles and finishes with honest pa
    await expect(page.locator('.instruction')).toHaveText('Slowly face the camera so I can find you.');
    await expect(page.locator('.scan-example')).toHaveAttribute('data-motion','still');
    await expect(page.locator('.auto-status')).toHaveAttribute('data-ready','false');
+   await expect.poll(()=>page.evaluate(()=>(window as any).vibrations.filter((p:any)=>Array.isArray(p)).length)).toBe(1);
    await page.waitForTimeout(1300);
    await page.screenshot({path:'.impeccable/review/continuous-extra-recovery-mobile.png',fullPage:true});
    await page.evaluate(()=>{(window as any).fixture.pose={yaw:0,pitch:0,roll:0};(window as any).fixture.faceCount=1;});
@@ -781,4 +803,50 @@ test('guided saving never awards progress before durable storage and resumes aft
  await page.reload();await page.getByRole('button',{name:'Continue session',exact:true}).click();
  await expect(page.getByRole('button',{name:'Start scan',exact:true})).toBeVisible();
  await expect(page.getByText('2 of 9 angles saved',{exact:true})).toBeVisible({timeout:15000});
+});
+
+test.describe('Android automatic gaze',()=>{
+test.use({userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/155.0.0.0 Mobile Safari/537.36'});
+test('all four eye directions capture automatically and reject an unmeasured final gaze',async({page})=>{
+ test.setTimeout(90000);await injectAnalysis(page);await injectSensor(page,'good');
+ await page.addInitScript(()=>{(window as any).vibrations=[];Object.defineProperty(navigator,'vibrate',{configurable:true,value:(pattern:any)=>{(window as any).vibrations.push(pattern);return true;}});});
+ await openCamera(page);await expect(page.getByText('1 of 28 shots saved')).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Pause',exact:true}).click();
+ await page.getByRole('button',{name:'Finish for now',exact:true}).click();await page.getByRole('button',{name:'Back to sessions',exact:true}).click();
+ await page.evaluate(async()=>{
+  const database=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('akutoo');r.onsuccess=()=>resolve(r.result);});
+  await new Promise<void>(resolve=>{const tx=database.transaction('sessions','readwrite'),table=tx.objectStore('sessions'),r=table.getAll();r.onsuccess=()=>{const session=r.result[0];session.progress.index=21;table.put(session);};tx.oncomplete=()=>resolve();});database.close();
+ });
+ await page.reload();await page.getByRole('button',{name:'Continue session',exact:true}).click();await page.getByRole('button',{name:'Start camera',exact:true}).click();
+ const neutral={eyeLookOutLeft:0,eyeLookInRight:0,eyeLookInLeft:0,eyeLookOutRight:0,eyeLookUpLeft:0,eyeLookUpRight:0,eyeLookDownLeft:0,eyeLookDownRight:0,eyeBlinkLeft:0,eyeBlinkRight:0};
+ await page.evaluate(neutral=>{(window as any).fixture.blendshapes={...neutral,eyeLookOutLeft:.8,eyeLookInRight:.8};(window as any).fixture.stillBlendshapes=neutral;},neutral);
+ await expect.poll(()=>page.evaluate(()=>(window as any).stillMeasurements??0),{timeout:20000}).toBeGreaterThanOrEqual(6);
+ expect((await photoInfo(page))?.count).toBe(1);
+ await page.evaluate(()=>{delete(window as any).fixture.stillBlendshapes;});
+ for(const [index,keys]of [['eyeLookOutLeft','eyeLookInRight'],['eyeLookInLeft','eyeLookOutRight'],['eyeLookUpLeft','eyeLookUpRight'],['eyeLookDownLeft','eyeLookDownRight']].entries()){
+  await page.evaluate(({neutral,keys})=>{(window as any).fixture.blendshapes={...neutral,[keys[0]]:.8,[keys[1]]:.8};},{neutral,keys});
+  await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBe(index+2);
+ }
+ const evidence=await page.evaluate(async()=>{const d=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('akutoo');r.onsuccess=()=>resolve(r.result);});const photos=await new Promise<any[]>(resolve=>{const r=d.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>resolve(r.result);});d.close();return photos.filter(p=>p.shotId.startsWith('gaze-')).map(p=>({trigger:p.captureTrigger,requested:p.direction,measured:p.gaze.direction}));});
+ expect(evidence).toHaveLength(4);for(const item of evidence){expect(item.trigger).toBe('automatic');expect(item.measured).toBe(item.requested);}
+ expect((await page.evaluate(()=>(window as any).vibrations)).filter((p:any)=>p===25).length).toBe(4);
+});
+});
+
+test('pausing a background save clears waiting frames without inventing progress',async({page})=>{
+ test.setTimeout(60000);await injectAnalysis(page,false,true);await openCamera(page,true);
+ await expect(page.getByText('1 of 9 angles saved',{exact:true})).toBeVisible({timeout:30000});
+ await page.evaluate(()=>{const close=FileSystemWritableFileStream.prototype.close;let delay=true;FileSystemWritableFileStream.prototype.close=async function(){await close.call(this);if(delay){delay=false;await new Promise<void>(resolve=>{(window as any).releaseWrite=resolve;});}};(window as any).fixture.pose={yaw:-15,pitch:0,roll:0};});
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).releaseWrite)).toBe('function');
+ await page.evaluate(()=>{(window as any).fixture.pose={yaw:-30,pitch:0,roll:0};});
+ const before=await page.evaluate(()=>(window as any).liveMeasurements);
+ await expect.poll(()=>page.evaluate(()=>(window as any).liveMeasurements)).toBeGreaterThan(before+6);
+ await page.getByRole('button',{name:'Pause',exact:true}).click();
+ await page.evaluate(()=>(window as any).releaseWrite());
+ await expect(page.getByRole('button',{name:'Resume',exact:true})).toBeEnabled();
+ await expect.poll(async()=>(await photoInfo(page))?.count).toBe(2);
+ const paused=await page.evaluate(()=>(window as any).liveMeasurements);await page.waitForTimeout(400);
+ expect((await photoInfo(page))?.count).toBe(2);expect(await page.evaluate(()=>(window as any).liveMeasurements)).toBeLessThanOrEqual(paused+1);
+ await page.getByRole('button',{name:'Resume',exact:true}).click();
+ await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBe(3);
 });
