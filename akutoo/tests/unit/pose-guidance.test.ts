@@ -5,6 +5,9 @@ const quality={score:64,tier:'C' as const,hardFailure:false,reason:null};
 const target=shots[1];
 const cue=(yaw:number,pitch=0,extra={})=>poseGuidance({shot:target,pose:{yaw,pitch,roll:0},quality,faceRatio:.5,expression:1,velocity:0,ready:false,...extra});
 describe('actionable pose feedback without changing capture acceptance',()=>{
+ it('does not tell an aligned gaze user to move closer when distance is not a capture blocker',()=>{
+  expect(cue(0,0,{shot:shots.find(s=>s.id==='gaze-left')!,faceRatio:.3})).toBe('expression');
+ });
  it('corrects undershoot, overshoot and target changes using subject directions',()=>{
   expect(cue(0)).toBe('left');expect(cue(-30)).toBe('right');
   expect(cue(0,0,{shot:shots.find(s=>s.id==='turn-15')!})).toBe('right');

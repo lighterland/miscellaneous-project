@@ -1,5 +1,8 @@
 import {guidedActive,primaryIds,extraIds} from '../session/guided-scan';
 import {ScanGuide} from './ScanGuide';
+import {GazeGuide} from './GazeGuide';
+import {gazeSweepActive,gazeShots} from '../session/free-sweep';
+import {measuredGaze} from '../analysis/gaze';
 import {sweepActive} from '../session/free-sweep';
 import {SoloEffects} from '../solo/effects';
 import {PoseGuide} from './PoseGuide';
@@ -44,6 +47,12 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
   const guide = shot?.detail ? detailGuide(shot.detail) : null;
   const sourceRatio = (state?.session.stream?.width ?? 3) / (state?.session.stream?.height ?? 4);
   const guided=!!p&&guidedActive(p)&&!state?.retakeFinished&&!detail&&!state?.session.retakePhotoId;
+  const eyes=!!p&&gazeSweepActive(p)&&!state?.retakeFinished&&!detail&&!state?.session.retakePhotoId;
+  const eyeTarget=(p?.attempts.slotAttempts?shot:gazeShots.find(value=>!p?.completed.includes(value.id)&&!p?.missed.includes(value.id))??shot)?.direction??'left';
+  const eyeCount=gazeShots.filter(value=>p?.completed.includes(value.id)).length;
+  const eyePose=state?.result?.pose;
+  const eyeDirection=measuredGaze(state?.result?.blendshapes??{});
+  const eyeText=state?.quality?.hardFailure&&state.quality.reason?s.fix[state.quality.reason]:!eyePose||Math.abs(eyePose.yaw)>7||Math.abs(eyePose.pitch)>7?s.gazeFaceForward:Math.max(state?.result?.blendshapes.eyeBlinkLeft??0,state?.result?.blendshapes.eyeBlinkRight??0)>=.5?s.gazeOpenEyes:state?.quality?.tier==='D'?s.poseCues.quality:eyeDirection&&!p?.completed.includes(`gaze-${eyeDirection}`)?s.gazeCollecting:s.gazeLook(eyeTarget);
   const summary=guided&&p?.guidedScan?.group==='summary';
   const primary=guided&&p?.guidedScan?.group!=='extra'&&!(summary&&p?.guidedScan?.summaryOf==='extra');
   const displayBins=guided?(primary?primaryIds:extraIds).map(id=>id==='chin-up'?'pitch:-15':id==='chin-down'?'pitch:15':`yaw:${id.slice(5)}`):poseBins;
@@ -53,23 +62,23 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
   const correction=state?.poseCue && state.poseCue!=='manual' ? state.poseCue==='expression' ? instruction : state.poseCue in s.fix ? s.fix[state.poseCue as keyof typeof s.fix] : s.poseCues[state.poseCue as keyof typeof s.poseCues] : null;
   const scanText=state?.scan?s.scanCues[state.scan.cue]:instruction;
   const scanCorrection=state?.scan?.status==='recovering'?scanText:state?.quality?.hardFailure&&state.quality.reason?s.fix[state.quality.reason]:scanText;
-  const speechBlockedByBusy=!guided&&state?.busy;
-  const spoken=guided?(baseline?scanCorrection:s.calibrating):baseline&&correction?correction:instruction;
+  const speechBlockedByBusy=!guided&&!eyes&&state?.busy;
+  const spoken=eyes?(baseline?eyeText===s.gazeCollecting?s.gazeLook(eyeTarget):eyeText:s.calibrating):guided?(baseline?scanCorrection:s.calibrating):baseline&&correction?correction:instruction;
   useEffect(() => {
     if(!voice){if('speechSynthesis' in window)speechSynthesis.cancel();return;}
     if(state?.countdown!==null&&state?.countdown!==undefined||state?.handsFreeReturning)return;
-    if(!voice||!state?.running||state.paused||(!guided&&state.busy)||state.pending||state.loading||state.modelFailed||!('speechSynthesis' in window)) {
+    if(!voice||!state?.running||state.paused||speechBlockedByBusy||state.pending||state.loading||state.modelFailed||!('speechSynthesis' in window)) {
       if('speechSynthesis' in window) speechSynthesis.cancel();
       return;
     }
-    const speechKey=guided?spoken:shot?.id;
+    const speechKey=guided||eyes?spoken:shot?.id;
     const changed=lastShot.current!==speechKey;
     const timer=window.setTimeout(()=>{
-      speakGuidance(!guided&&changed&&spoken!==instruction?`${instruction} ${spoken}`:spoken,voiceURI);
+      speakGuidance(!guided&&!eyes&&changed&&spoken!==instruction?`${instruction} ${spoken}`:spoken,voiceURI);
       lastSpoken.current=performance.now();lastShot.current=speechKey??'';
     },guided&&(state?.scan?.status==='holding'||state?.scan?.status==='saving')?0:changed?350:speechDelay(performance.now(),lastSpoken.current));
     return ()=>window.clearTimeout(timer);
-  },[spoken,guided,voice,voiceURI,state?.running,state?.paused,speechBlockedByBusy,state?.pending,state?.loading,state?.modelFailed,state?.countdown,state?.handsFreeReturning]);
+  },[spoken,guided,eyes,voice,voiceURI,state?.running,state?.paused,speechBlockedByBusy,state?.pending,state?.loading,state?.modelFailed,state?.countdown,state?.handsFreeReturning]);
   useEffect(()=>{
     if(!state)return;
     const count=state?.session.stats?.captures??0;
@@ -102,18 +111,23 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
   }
   const fixing = !!p?.attempts.sessionFix;
   const autoReady=!!state?.autoReady&&!counting&&!busy&&!state.paused&&!state.modelFailed&&!shot?.manual;
-  const autoLabel=counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeCount(state?.countdown??0)):state?.busy?(guided?s.scanSavingFrame:s.autoSaving):state?.loading?s.autoPreparing:state?.modelFailed?s.autoUnavailable:state?.paused?s.autoPaused:shot?.manual?s.autoManual:!baseline?s.autoCalibrating:guided?(autoReady?s.scanCollecting:s.scanMoving):autoReady?s.autoReady:s.autoAlign;
-  const feedback = counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeAway):state?.handsFreeReturning?s.handsFreeReturnHelp:state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || (!guided&&state.quality?.hardFailure)) ? state.message : guided?scanCorrection:correction??instruction;
-  return <main className={fixing ? 'capture-screen fix-screen' : `capture-screen${guided?' guided-screen':shot&&!detail&&shot.stage<=2?' has-pose-guide':''}${summary?' scan-summary-screen':''}`}>
+  const autoLabel=counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeCount(state?.countdown??0)):state?.busy?(guided?s.scanSavingFrame:s.autoSaving):state?.loading?s.autoPreparing:state?.modelFailed?s.autoUnavailable:state?.paused?s.autoPaused:shot?.manual?s.autoManual:!baseline?s.autoCalibrating:(guided||eyes)?(autoReady?s.scanCollecting:eyes?s.gazeScanning:s.scanMoving):autoReady?s.autoReady:s.autoAlign;
+  const feedback = counting?(state?.countdown===0?s.handsFreeHold:s.handsFreeAway):state?.handsFreeReturning?s.handsFreeReturnHelp:state?.message === s.cameraInterrupted ? s.cameraInterrupted : state?.paused ? s.paused : state?.message && (state.loading || state.modelFailed || !baseline || (!guided&&state.quality?.hardFailure)) ? state.message : eyes?eyeText:guided?scanCorrection:correction??instruction;
+  return <main className={fixing ? 'capture-screen fix-screen' : `capture-screen${guided?' guided-screen':shot&&!detail&&shot.stage<=2?' has-pose-guide':''}${eyes?' eye-screen':''}${summary?' scan-summary-screen':''}`}>
     <div className={fixing ? 'scan-layout is-hidden' : 'scan-layout'} inert={fixing}>
-    <header className="capture-header"><button className="quiet" onClick={() => void leave()} disabled={!!busy}>{s.finish}</button><span>{guided?s.scanProgress(savedCount,displayBins.length):p ? s.progress(p.completed.length, plan.length) : s.setupTitle}</span></header>
-    <div className="capture-heading">{!detail&&!guided && <p>{shot ? s.stage(shot.stage) : s.sessionComplete}</p>}<h1>{guided?(primary?s.scanTitle:s.scanExtraTitle):sweeping?s.freeSweepTitle:shot ? s.stageNames[shot.stage - 1] : s.sessionComplete}</h1></div>
-    <div className={`scan-visual${summary?' is-hidden':''}`}><div className={`${state?.pending?'is-hidden ':''}${counting?'is-counting ':''}${detail?'camera-frame detail-camera':'camera-frame'}`} style={detail ? { aspectRatio: `${sourceRatio}`, width: `min(100%, 400px, ${38 * sourceRatio}svh)` } : undefined}>
+    <header className="capture-header"><button className="quiet" onClick={() => void leave()} disabled={!!busy}>{s.finish}</button><span>{eyes?s.gazeProgress(eyeCount):guided?s.scanProgress(savedCount,displayBins.length):p ? s.progress(p.completed.length, plan.length) : s.setupTitle}</span></header>
+    <div className="capture-heading">{!detail&&!guided&&!eyes && <p>{shot ? s.stage(shot.stage) : s.sessionComplete}</p>}<h1>{eyes?s.gazeTitle:guided?(primary?s.scanTitle:s.scanExtraTitle):sweeping?s.freeSweepTitle:shot ? s.stageNames[shot.stage - 1] : s.sessionComplete}</h1></div>
+    <div className={`scan-visual${eyes?' eye-screen':''}${summary?' is-hidden':''}`}><div className={`${state?.pending?'is-hidden ':''}${counting?'is-counting ':''}${detail?'camera-frame detail-camera':'camera-frame'}`} style={detail ? { aspectRatio: `${sourceRatio}`, width: `min(100%, 400px, ${38 * sourceRatio}svh)` } : undefined}>
       <video ref={video} autoPlay muted playsInline className={state?.camera === 'user' ? 'mirror' : ''} />
-      {guide ? <div className="detail-guide" role="img" aria-label={s.detailGuide} style={{ left: `${guide.x * 100}%`, top: `${guide.y * 100}%`, width: `${guide.width * 100}%`, height: `${guide.height * 100}%` }}/> : <svg className="scan-ring" viewBox="0 0 300 400" role="img" aria-label={s.coverageCount(savedCount, displayBins.length)}>{displayBins.map((bin, segment) => {
+      {guide ? <div className="detail-guide" role="img" aria-label={s.detailGuide} style={{ left: `${guide.x * 100}%`, top: `${guide.y * 100}%`, width: `${guide.width * 100}%`, height: `${guide.height * 100}%` }}/> : eyes?<GazeGuide target={eyeTarget} completed={p?.completed??[]} mirror={state?.camera==='user'} active={!!state?.running&&!state.paused&&!!baseline&&!state.modelFailed&&!state.quality?.hardFailure} ready={autoReady&&eyeDirection===eyeTarget}/>:<svg className="scan-ring" viewBox="0 0 300 400" role="img" aria-label={s.coverageCount(savedCount, displayBins.length)}>{displayBins.map((bin, segment) => {
         const complete = state?.coveredBins.includes(bin);
-        const a = segment / displayBins.length * Math.PI * 2 - Math.PI / 2, b = (segment + .78) / displayBins.length * Math.PI * 2 - Math.PI / 2;
-        return <path key={bin} data-pose-bin={bin} d={`M ${150 + 120 * Math.cos(a)} ${200 + 170 * Math.sin(a)} A 120 170 0 0 1 ${150 + 120 * Math.cos(b)} ${200 + 170 * Math.sin(b)}`} className={complete ? 'complete' : ''} />;
+        const ticks=guided?54/displayBins.length:1;
+        const path=Array.from({length:ticks},(_,tick)=>{
+          const start=segment+tick/ticks,end=start+.62/ticks;
+          const a=start/displayBins.length*Math.PI*2-Math.PI/2,b=end/displayBins.length*Math.PI*2-Math.PI/2;
+          return `M ${150+120*Math.cos(a)} ${200+170*Math.sin(a)} A 120 170 0 0 1 ${150+120*Math.cos(b)} ${200+170*Math.sin(b)}`;
+        }).join(' ');
+        return <path key={bin} data-pose-bin={bin} d={path} className={complete ? 'complete' : ''} />;
       })}</svg>}
       {!guided&&shot&&!detail&&shot.stage<=2&&<PoseGuide shot={shot} pose={state?.running&&!state.paused?state.result?.pose??null:null} ready={autoReady} mirror={state?.camera==='user'}/>}
       {counting&&<div className="handsfree-countdown" data-hold={state?.countdown===0?'true':'false'} role="status"><strong>{state?.countdown||s.handsFreeHoldLabel}</strong><p>{state?.countdown===0?s.handsFreeHold:s.handsFreePose(shot?.yaw??0)}</p></div>}
@@ -125,7 +139,7 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
       {summary&&<section className="scan-summary"><h2>{primary?s.scanSummary:s.scanExtraSummary}</h2><p>{s.scanProgress(savedCount,displayBins.length)}</p><p>{primary?s.scanSummaryHelp:s.scanExtraHelp}</p><button className="primary" onClick={()=>void controller.current?.chooseGroup('expressions')}>{s.scanExpressions}</button>{primary&&<button className="quiet" onClick={()=>void controller.current?.chooseGroup('extra')}>{s.scanExtras}</button>}{!primary&&!!p?.missed.length&&<button className="quiet" onClick={()=>void controller.current?.revisit()}>{s.revisit}</button>}<button className="quiet" onClick={()=>void leave()}>{s.review}</button></section>}
       <div className={summary?'is-hidden':undefined}>
       {guided&&state?.running&&p?.guidedScan&&!counting&&!state.pending&&<nav className="scan-journey" aria-label={s.scanExample}>{(primary?['front','left','right','up','down']as const:['left','right']as const).map(phase=><span key={phase} aria-current={p.guidedScan?.phase===phase||p.guidedScan?.phase===`return-${phase}`?'step':undefined}>{s.scanJourney[phase]}</span>)}</nav>}
-      {state?.running&&!state.pending&&<div className={autoReady?'auto-status is-ready':'auto-status'} data-ready={autoReady?'true':'false'}><p role="status">{autoLabel}</p>{!guided&&!counting&&!shot?.manual&&!state.modelFailed&&baseline&&<div role="progressbar" aria-label={s.autoHoldProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((state.holdProgress??0)*100)} className="auto-hold"><span style={{width:`${Math.round((state.holdProgress??0)*100)}%`}}/></div>}</div>}
+      {state?.running&&!state.pending&&<div className={autoReady?'auto-status is-ready':'auto-status'} data-ready={autoReady?'true':'false'}><p role="status">{autoLabel}</p>{!guided&&!eyes&&!counting&&!shot?.manual&&!state.modelFailed&&baseline&&<div role="progressbar" aria-label={s.autoHoldProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((state.holdProgress??0)*100)} className="auto-hold"><span style={{width:`${Math.round((state.holdProgress??0)*100)}%`}}/></div>}</div>}
       {detail && shot && <p className="instruction">{instruction}</p>}
       {(!detail || feedback !== instruction) && <p className={detail ? 'capture-note' : 'instruction'} aria-live="polite">{feedback}</p>}
       {detail && <details className="detail-tips"><summary>{s.detailPhotoTips}</summary><p className="capture-note">{s.detailHelp}</p></details>}
@@ -133,18 +147,23 @@ export function CaptureScreen({ session, onLeave }: { session: Session; onLeave:
       {!guided&&!counting&&!state?.paused&&!state?.pending&&shot&&!shot.manual&&!detail&&shot.stage<=2&&<p className="capture-note">{s.poseFollow}</p>}
       {!state?.running && shot && <><label className="field">{s.camera}<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)} disabled={!!busy}><option value="user">{s.front}</option><option value="environment">{s.rear}</option></select></label><button className="primary" disabled={!!busy} onClick={() => {void effects.current.enable();if(guided){setVoice(true);speakGuidance(s.scanWelcome,voiceURI);}void controller.current?.start(camera);}}>{state?.loading ? s.cameraLoading : guided?s.scanStart:s.startCamera}</button>{guided&&<p className="capture-note">{s.scanStartHelp}</p>}</>}
       {state?.running && <>
-        {!state.pending&&<div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!state.loading || (!!state.busy&&!guided)}>{state.paused ? s.resume : s.pause}</button>{guided&&!counting?<span className="auto-capture-mark">{s.scanAutomatic}</span>:counting?<button className="quiet" disabled={!!busy} onClick={()=>{controller.current?.cancelCountdown();controller.current?.pause();}}>{s.handsFreeCancel}</button>:<button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending || counting}><span /></button>}<button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>}
+        {!state.pending&&<div className="capture-actions"><button className="quiet" onClick={() => controller.current?.pause()} disabled={!!state.loading || (!!state.busy&&!guided&&!eyes)}>{state.paused ? s.resume : s.pause}</button>{(guided||eyes)&&!counting?<span className="auto-capture-mark">{s.scanAutomatic}</span>:counting?<button className="quiet" disabled={!!busy} onClick={()=>{controller.current?.cancelCountdown();controller.current?.pause();}}>{s.handsFreeCancel}</button>:<button className="shutter" aria-label={s.capture} onClick={() => void controller.current?.capture()} disabled={!!busy || !!state.pending || counting}><span /></button>}<button className="quiet" disabled={!voiceReady || voiceSaving} onClick={() => void toggleVoice()}>{voice ? s.voiceOn : s.voiceOff}</button></div>}
       {!guided&&sweeping&&state?.running&&!state.pending&&!counting&&<p className="sweep-instruction">{s.freeSweepHelp}<span>{s.sweepProgress(state.coveredBins.length)}</span></p>}
-        {!guided&&!state.pending&&<p className="capture-note">{s.reviewNeeded}</p>}
-        {busy && !guided && <p role="status">{s.saving}</p>}
+        {!guided&&!eyes&&!state.pending&&<p className="capture-note">{s.reviewNeeded}</p>}
+        {busy && !guided && !eyes && <p role="status">{s.saving}</p>}
         {shot?.manual && <p>{s.manualHint}</p>}
-        {!state.pending&&!counting&&!state.paused&&!detail&&shot&&!guided&&<section className="handsfree-tools">
+        {!state.pending&&!counting&&!state.paused&&!detail&&shot&&!guided&&!eyes&&<section className="handsfree-tools">
           {sweeping?<><div className="handsfree-buttons"><button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)||p?.completed.includes('turn--90')||p?.missed.includes('turn--90')} onClick={()=>void handsFree(-90)}>{s.handsFreeLeft}</button><button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)||p?.completed.includes('turn-90')||p?.missed.includes('turn-90')} onClick={()=>void handsFree(90)}>{s.handsFreeRight}</button></div>{guided&&<button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)} onClick={()=>void handsFree()}>{s.handsFreeStart}</button>}<p className="capture-note">{s.handsFreeHelp}</p><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.finishFreeSweep()}>{s.freeSweepContinue}</button><p className="capture-note">{s.freeSweepLater}</p></>:<button className="quiet" disabled={!!busy||!voiceReady||(!baseline&&!state.modelFailed)} onClick={()=>void handsFree()}>{s.handsFreeStart}</button>}
         </section>}
         {p&&!guided&&shot&&shot.stage<=2&&!state.pending&&!detail&&!state.session.retakePhotoId&&<button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.enableFreeSweep()}>{s.freeSweepEnable}</button>}
 
-        {!guided&&!counting&&!state.pending&&shot&&!shot.manual&&<p className="capture-note">{s.poseFallback}</p>}
-        {!guided&&!state.pending && !p?.attempts.sessionFix && <div className="skip-controls"><label className="field">{s.skipReason}<select value={reason} onChange={event => setReason(event.target.value)}>{Object.entries(s.skipOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button className="quiet" disabled={!!busy||counting} onClick={() => void controller.current?.skip(reason)}>{s.nextPose}</button></div>}
+        {!guided&&!eyes&&!counting&&!state.pending&&shot&&!shot.manual&&<p className="capture-note">{s.poseFallback}</p>}
+        {!guided&&!eyes&&!state.pending && !p?.attempts.sessionFix && <div className="skip-controls"><label className="field">{s.skipReason}<select value={reason} onChange={event => setReason(event.target.value)}>{Object.entries(s.skipOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button className="quiet" disabled={!!busy||counting} onClick={() => void controller.current?.skip(reason)}>{s.nextPose}</button></div>}
+      </>}
+      {eyes&&state?.running&&!state.pending&&!counting&&<>
+        <p className="capture-note">{s.gazeSavedHelp}</p>
+        {state.stall!=='none'&&<p className="scan-stall" role="status">{s.gazeHelp}</p>}
+        <details className="scan-options"><summary>{s.gazeOptions}</summary><p>{s.gazeHelp}</p><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.skip('later')}>{s.nextPose}</button><button className="quiet" disabled={!!busy} onClick={()=>void controller.current?.capture()}>{s.capture}</button></details>
       </>}
       {guided&&state?.running&&!state.pending&&!counting&&<>
         <p className="capture-note">{primary?s.scanHelp:s.scanExtraHelp}</p>

@@ -1,5 +1,5 @@
 import {beginGuidedScan,guidedActive,updateGuide,scanFeedback,chooseScanGroup,deferUntrackedSide,stallLevel,type ScanStatus,type ScanCue} from '../session/guided-scan';
-import {selectSweepShot,finishSweep,sweepActive,chooseTimedProfile} from '../session/free-sweep';
+import {selectSweepShot,finishSweep,sweepActive,chooseTimedProfile,gazeSweepActive} from '../session/free-sweep';
 import {handsFreeStep} from './hands-free';
 import {autoCaptureReady} from './auto-ready';
 import {poseGuidance, type PoseCue} from './pose-guidance';
@@ -70,6 +70,7 @@ export class CaptureController {
   }
   private get plan() { return capturePlan(this.state.session); }
   private get continuous() {return guidedActive(this.progress)&&this.progress.guidedScan?.group!=='summary'&&!this.state.session.details?.active&&!this.state.session.retakePhotoId;}
+  private get eyeScan() {return gazeSweepActive(this.progress)&&!this.state.session.details?.active&&!this.state.session.retakePhotoId;}
   private clearFrames(){if(this.frames)this.frames.best.canvas.width=0;this.frames=null;this.queued.clear();this.lostSince=null;this.lastSweepYaw=0;}
   private get progress() { return captureProgress(this.state.session); }
   private set progress(value) { if (this.state.session.details?.active) this.state.session.details.progress = value; else this.state.session.progress = value; }
@@ -118,7 +119,7 @@ export class CaptureController {
     const tickNow=performance.now();
     const active=this.state.running&&!this.state.paused&&!this.state.busy&&!this.state.pending&&this.state.countdown===null&&!!this.baseline&&!!this.shot;
     if(active&&this.lastActiveTick!==null)this.activeWithoutSave+=Math.min(1000,tickNow-this.lastActiveTick);
-    this.lastActiveTick=active?tickNow:null;this.state.stall=stallLevel(this.activeWithoutSave);
+    this.lastActiveTick=active?tickNow:null;this.state.stall=this.eyeScan&&this.activeWithoutSave>=3000&&this.activeWithoutSave<30000?'help':stallLevel(this.activeWithoutSave);
     const attempts = this.progress.attempts, elapsed = elapsedAttempts(attempts, Date.now());
     if (!this.state.busy&&attempts !== elapsed) { this.progress.attempts = elapsed; try { await this.persist(); } catch (error) { this.state.message = error instanceof SessionConflict ? s.sessionChanged : s.saveError; this.emit(); } }
     if (generation !== this.generation) return;
@@ -127,7 +128,7 @@ export class CaptureController {
     try {
       this.state.autoReady=false;this.state.holdProgress=0;this.state.poseCue=null;
       // Keep the exact analyzed pixels; a later exposure may be another pose.
-      if(this.continuous&&this.baseline)sampled=this.camera.frame();
+      if((this.continuous||this.eyeScan)&&this.baseline)sampled=this.camera.frame();
       const result = await this.measure(sampled??this.video);
       if (generation !== this.generation) return;
       if(this.state.countdown!==null||this.state.paused||this.state.pending||(this.state.busy&&!this.processing)){this.schedule(generation);return;}
@@ -172,7 +173,7 @@ export class CaptureController {
     const previousGuide=this.progress.guidedScan;
     // A save owns persisted progress. Live tracking may collect pixels, but must
     // not race its revision or move its target slot while that transaction runs.
-    if(!this.processing){
+    if(!this.processing&&this.continuous){
     if(result.pose){this.lastSweepYaw=result.pose.yaw;this.lostSince=null;}
     else {
       this.lostSince??=performance.now();
@@ -185,11 +186,13 @@ export class CaptureController {
     if(generation!==this.generation||this.state.paused||(this.state.busy&&!this.processing)||this.state.countdown!==null){canvas.width=0;return;}
     const reserved=[...this.queued.indices(),...(this.savingIndex===null?[]:[this.savingIndex])];
     const selection={...this.progress,completed:[...this.progress.completed,...reserved.map(index=>this.plan[index].id)]};
-    const index=selectSweepShot(selection,result.pose);
+    const gaze=measuredGaze(result.blendshapes);
+    const index=selectSweepShot(selection,result.pose,gaze);
     const target=index===null?this.shot:this.plan[index];
     const quality=target?this.grade(result,target):{score:0,tier:'D' as const,hardFailure:true,reason:'invalid' as const};
     this.state.quality=quality;
-    const eligible=index!==null&&!!target&&measuredTarget(target,result.pose)&&!quality.hardFailure&&quality.tier!=='D';
+    const eligible=index!==null&&!!target&&measuredTarget(target,result.pose)&&!quality.hardFailure&&quality.tier!=='D'&&(!target.direction||gaze===target.direction);
+    if(this.eyeScan&&this.shot)this.state.poseCue=poseGuidance({shot:this.shot,pose:result.pose,quality,faceRatio:result.measurements?.faceRatio??0,expression:1,velocity:0,ready:eligible});
     const frame=eligible?{index,score:quality.score,sharpness:result.measurements?.sharpness??0,canvas,result,quality}:null;
     const batch=offerFrame(this.frames,frame);this.frames=batch.window;
     if(!frame)canvas.width=0;
@@ -208,6 +211,7 @@ export class CaptureController {
     try{
       while(generation===this.generation&&!this.state.paused&&this.state.running&&!this.state.pending){
         const frame=this.queued.take();if(!frame)break;
+        if(this.eyeScan&&this.progress.attempts.slotAttempts>0&&frame.index!==this.progress.index){frame.canvas.width=0;continue;}
         const id=this.plan[frame.index].id;
         if(this.progress.completed.includes(id)||this.progress.missed.includes(id)){frame.canvas.width=0;continue;}
         this.savingIndex=frame.index;this.progress={...this.progress,index:frame.index};

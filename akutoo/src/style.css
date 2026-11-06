@@ -339,6 +339,7 @@ select { min-height: 48px; border-radius: 12px; border: 1px solid #857a9c; color
 .scan-continue { margin:8px 0; }.scan-stall { padding:14px;background:#241c38;color:#f4f1fb;border-radius:12px;font-size:15px; }
 .scan-summary { text-align:left;padding:24px 0; }.scan-summary h2 { font-size:30px; }.scan-summary p { color:#e0d9ee;line-height:1.6; }.scan-summary button { display:block;width:100%;margin:12px 0; }
 .guided-screen .scan-ring { pointer-events:none; }
+.guided-screen .scan-ring path.complete { stroke:#b9efc6; }
 @media(min-width:900px) {
  .guided-screen .scan-visual { display:grid;grid-template-columns:380px 260px;align-items:center;gap:32px;max-width:672px; }
  .guided-screen .camera-frame { height:420px; }.scan-example { position:static;width:100%;max-width:none;padding:20px; }.scan-example svg { max-height:300px; }.scan-example span { font-size:16px; }
@@ -351,6 +352,23 @@ select { min-height: 48px; border-radius: 12px; border: 1px solid #857a9c; color
 @media(prefers-reduced-motion:reduce) { .scan-example[data-motion=moving] .demo-features,.scan-example[data-motion=moving] .demo-outline { animation:none; } }
 
 .guided-screen .scan-visual.is-hidden { display:none; }
+
+/* Gaze targets stay near the edges, leaving the eyes visible in the preview. */
+.eye-screen .camera-frame { width:min(100%,440px);height:clamp(240px,44svh,420px); }
+.eye-screen .capture-heading { margin:8px auto 12px; }
+.eye-screen .capture-heading h1 { font-size:30px; }
+.eye-screen .instruction { font-size:22px;line-height:1.3;min-height:58px;margin:12px 0; }
+.gaze-guide { position:absolute;inset:0;pointer-events:none; }
+.gaze-point { position:absolute;transform:translate(-50%,-50%);width:40px;height:40px;color:#b7adce;background:#14101f;border-radius:50%; }
+.gaze-point svg { width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2; }
+.gaze-point .gaze-core { fill:currentColor;stroke:none; }
+.gaze-point.is-target { color:#ffb98f;outline:2px solid #ffb98f;outline-offset:3px; }
+.gaze-point.is-target .gaze-core { animation:gaze-focus 1.8s ease-in-out infinite;transform-origin:center; }
+.gaze-point.is-saved,.gaze-point.is-ready { color:#b9efc6; }
+.gaze-point.is-saved path { stroke-width:3; }
+@keyframes gaze-focus { 50% { transform:scale(.65); } }
+@media(prefers-reduced-motion:reduce) { .gaze-point.is-target .gaze-core { animation:none; } }
+@media(max-height:720px) { .eye-screen .camera-frame { height:230px; }.eye-screen .instruction { font-size:20px;min-height:52px;margin:8px 0; }.eye-screen .capture-heading h1 { font-size:25px; } }
 
 /* Continuous scan: movement example beside the face, never covering it. */
 .guided-screen .scan-visual { display:grid;grid-template-columns:minmax(0,1.45fr) minmax(110px,.8fr);gap:12px;align-items:center; }

@@ -3,13 +3,27 @@ import {nextSlot,resetCause} from './attempts';
 import type {Progress} from './progress';
 import {shots} from './shotlist';
 import type {AnalysisResult} from '../analysis/protocol';
+import type {GazeDirection} from '../analysis/gaze';
 export const sweepShots=shots.filter(shot=>shot.stage<=2);
+export const gazeShots=shots.filter(shot=>!!shot.direction);
+export function gazeSweepActive(p:Progress):boolean {return !p.revisiting&&!!shots[p.index]?.direction;}
+export function nextGazeIndex(p:Pick<Progress,'completed'|'missed'>):number {
+ const next=shots.findIndex(shot=>shot.direction&&!p.completed.includes(shot.id)&&!p.missed.includes(shot.id));
+ return next<0?shots.findIndex(shot=>shot.id===gazeShots.at(-1)!.id)+1:next;
+}
 export function sweepActive(p:Progress):boolean {return p.freeSweep===true&&!p.revisiting&&p.index<sweepShots.length;}
 export function nextSweepIndex(p:Pick<Progress,'completed'|'missed'>):number {
  const next=sweepShots.findIndex(shot=>!p.completed.includes(shot.id)&&!p.missed.includes(shot.id));
  return next<0?sweepShots.length:next;
 }
-export function selectSweepShot(p:Progress,pose:AnalysisResult['pose']):number|null {
+export function selectSweepShot(p:Progress,pose:AnalysisResult['pose'],gaze:GazeDirection|null=null):number|null {
+ if(gazeSweepActive(p)){
+  if(!pose||![pose.yaw,pose.pitch,pose.roll].every(Number.isFinite)||Math.abs(pose.yaw)>7||Math.abs(pose.pitch)>7||!gaze||p.attempts.moveOn||p.attempts.sessionFix)return null;
+  const index=shots.findIndex(shot=>shot.direction===gaze);
+  if(p.completed.includes(shots[index].id)||p.missed.includes(shots[index].id))return null;
+  // A failed slot keeps its budget and target until explicitly resolved.
+  return p.attempts.slotAttempts>0&&index!==p.index?null:index;
+ }
  if(!sweepActive(p)||!pose||![pose.yaw,pose.pitch,pose.roll].every(Number.isFinite))return null;
  const candidates=sweepShots.map((shot,index)=>({shot,index,error:Math.hypot(shot.yaw-pose.yaw,shot.pitch-pose.pitch)}))
  .filter(({shot})=>(!guidedActive(p)||groupIds(p).includes(shot.id))&&!p.completed.includes(shot.id)&&!p.missed.includes(shot.id)&&Math.abs(shot.yaw-pose.yaw)<=7&&Math.abs(shot.pitch-pose.pitch)<=7);

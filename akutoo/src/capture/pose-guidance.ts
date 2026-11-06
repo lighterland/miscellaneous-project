@@ -11,7 +11,7 @@ export function poseGuidance(input: {shot:Shot;pose:AnalysisResult['pose'];quali
   if(!pose || !Number.isFinite(pose.yaw) || !Number.isFinite(pose.pitch)) return 'tracking';
   if(ready) return 'ready';
   const turn=shot.stage<=2&&!shot.detail;
-  if(!turn&&faceRatio<.35) return 'closer';
+  if(!turn&&!shot.direction&&faceRatio<.35) return 'closer';
   const yaw=shot.yaw-pose.yaw,pitch=shot.pitch-pose.pitch;
   if(Math.abs(yaw)>7) return yaw<0?'left':'right';
   if(Math.abs(pitch)>7) return pitch<0?'up':'down';

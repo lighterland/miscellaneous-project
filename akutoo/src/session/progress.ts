@@ -1,5 +1,5 @@
 import {advanceGuided,guidedActive,type GuidedScan} from './guided-scan';
-import {sweepActive,nextSweepIndex} from './free-sweep';
+import {sweepActive,nextSweepIndex,gazeSweepActive,nextGazeIndex} from './free-sweep';
 import { shots } from './shotlist';
 import { initialAttempts, nextSlot, recordFailure, resetCause, type Attempts, type Cause } from './attempts';
 export interface Progress {
@@ -34,6 +34,7 @@ export function advanceSlot(p: Progress, reason?: string, plan: readonly { id: s
     missed: id && reason ? [...new Set([...p.missed, id])] : p.missed,
     skipped: id && reason ? { ...p.skipped, [id]: reason } : p.skipped, attempts: nextSlot(p.attempts) };
   if(guidedActive(p)&&plan===shots)return advanceGuided(next);
+  if(gazeSweepActive(p)&&plan===shots)return {...next,index:nextGazeIndex(next)};
   return sweepActive(p)&&plan===shots?{...next,index:nextSweepIndex(next)}:next;
 }
 export function acceptSlot(p: Progress, photoId: string, plan: readonly { id: string }[] = shots): Progress {

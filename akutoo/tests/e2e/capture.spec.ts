@@ -12,13 +12,17 @@ async function injectAnalysis(page: Page, unavailable = false, snapshotPose = fa
     Object.defineProperty(navigator, 'canShare', { configurable: true, value: (data: ShareData) => !!data.files?.length });
     Object.defineProperty(navigator, 'share', { configurable: true, value: async (data: ShareData) => { (window as any).sharedNames = data.files?.map(file => file.name); } });
     (window as any).fixture = { clipped: .01 };
+    const eyePairs=[['eyeLookOutLeft','eyeLookInRight'],['eyeLookInLeft','eyeLookOutRight'],['eyeLookUpLeft','eyeLookUpRight'],['eyeLookDownLeft','eyeLookDownRight']];
     if(snapshotPose){
       // Encode synthetic pose into captured pixels so JPEG reanalysis observes
       // the original frame, even while the simulated head continues moving.
       const draw=CanvasRenderingContext2D.prototype.drawImage;
       CanvasRenderingContext2D.prototype.drawImage=function(this:CanvasRenderingContext2D,...args:any[]){
         (draw as any).apply(this,args);
-        if(args[0] instanceof HTMLVideoElement){const p=(window as any).fixture.pose??{yaw:0,pitch:0};this.fillStyle=`rgb(${p.yaw+100} ${p.pitch+100} 222)`;this.fillRect(0,0,64,64);}
+        if(args[0] instanceof HTMLVideoElement){const p=(window as any).fixture.pose??{yaw:0,pitch:0};this.fillStyle=`rgb(${p.yaw+100} ${p.pitch+100} 222)`;this.fillRect(0,0,64,64);
+         const values=(window as any).fixture.blendshapes??{},direction=eyePairs.findIndex(keys=>keys.every(key=>values[key]>=.8));
+         this.fillStyle=`rgb(${(direction+1)*40} 99 222)`;this.fillRect(80,0,64,64);
+        }
       } as typeof draw;
     }
     window.Worker = class {
@@ -27,7 +31,8 @@ async function injectAnalysis(page: Page, unavailable = false, snapshotPose = fa
       postMessage(message: any) {
         if (message.type === 'load') { setTimeout(() => this.onmessage?.({ data: unavailable ? { id: message.id, type: 'error', error: 'fixture unavailable' } : { id: message.id, type: 'ready' } }), 5); return; }
         const width = message.bitmap.width, height = message.bitmap.height;
-        let snapshot:any;
+        let snapshot:any,snapshotEyes:Record<string,number>|undefined;
+        if(snapshotPose){const c=new OffscreenCanvas(1,1),ctx=c.getContext('2d')!;ctx.drawImage(message.bitmap,100,20,1,1,0,0,1,1);const rgb=ctx.getImageData(0,0,1,1).data;if(Math.abs(rgb[2]-222)<4){const direction=Math.round(rgb[0]/40)-1;snapshotEyes=Object.fromEntries([...eyePairs.flat(),'eyeBlinkLeft','eyeBlinkRight'].map(key=>[key,0]));for(const key of eyePairs[direction]??[])snapshotEyes[key]=.8;}}
         if(snapshotPose){const c=new OffscreenCanvas(1,1),ctx=c.getContext('2d')!;ctx.drawImage(message.bitmap,20,20,1,1,0,0,1,1);const rgb=ctx.getImageData(0,0,1,1).data;if(Math.abs(rgb[2]-222)<4)snapshot={yaw:rgb[0]-100,pitch:rgb[1]-100,roll:0};}
         message.bitmap.close();
         const fixture = (window as any).fixture;
@@ -35,6 +40,7 @@ async function injectAnalysis(page: Page, unavailable = false, snapshotPose = fa
         else (window as any).stillMeasurements=((window as any).stillMeasurements??0)+1;
         const result = { measurements: { faceCount: fixture.faceCount??1, occluded: false, occlusionVerified: false, headCutOff: false, sharpness: width === 2048 ? fixture.sensorSharpness ?? 200 : fixture.sharpness ?? 100, clipped: fixture.clipped, exposure: 120, faceRatio: fixture.faceRatio ?? .5, shortSide: Math.min(width, height), angleError: 0, expressionMatch: 1 }, pose: 'pose' in fixture?fixture.pose:{ yaw: 0, pitch: 0, roll: 0 }, blendshapes: fixture.blendshapes ?? {}, hash: fixture.hash ?? '0000000000000000', durationMs: 5, occlusionVerified: false, ratios: fixture.ratios ?? { eyeSpan: .3, faceWidth: .7 } };
         if(snapshot)result.pose=snapshot;
+        if(snapshotEyes)result.blendshapes=snapshotEyes;
         if(message.still&&fixture.stillBlendshapes)result.blendshapes=fixture.stillBlendshapes;
         setTimeout(() => this.onmessage?.({ data: { id: message.id, type: 'result', result } }), fixture.delay??5);
       }
@@ -304,8 +310,9 @@ test('all 28 guided shots can be completed with saved photos in under 15 minutes
     // The full-scan fixture provides a distinct second neutral sample. The
     // dedicated duplicate test above keeps identical hashes to prove reuse.
     }, { yaw: shot.yaw, pitch: shot.pitch, smile, jaw, expression: shot.expression, hash: shot.id === 'expression-neutral' ? 'ffffffffffffffff' : '0000000000000000' });
+    if(shot.direction&&!await page.getByRole('button',{name:'Take photo',exact:true}).isVisible())await page.getByText('Eye scan options',{exact:true}).click();
     await page.getByRole('button', { name: 'Take photo', exact: true }).click();
-    await expect(page.getByText(`${index + 1} of 28 shots saved`)).toBeVisible({ timeout: 15000 });
+    await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBe(index+1);
   }
   await expect(page.getByRole('heading', { name: 'Your scan is saved' })).toBeVisible();
   expect(await photoInfo(page)).toMatchObject({ count: 28, jpeg: true, hasExif: false });
@@ -807,6 +814,38 @@ test('guided saving never awards progress before durable storage and resumes aft
 
 test.describe('Android automatic gaze',()=>{
 test.use({userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/155.0.0.0 Mobile Safari/537.36'});
+test('eye sweep keeps tracking during saving and captures short glances from original pixels',async({page,context})=>{
+ test.setTimeout(90000);const violations:string[]=[];
+ context.on('request',r=>{if(!['GET','HEAD'].includes(r.method())||r.postDataBuffer()||new URL(r.url()).origin!=='http://localhost:5174')violations.push(r.url());});
+ await injectAnalysis(page,false,true);await page.goto('/');await page.getByRole('button',{name:'Start new session'}).click();
+ await page.getByRole('button',{name:'Finish for now',exact:true}).click();await page.getByRole('button',{name:'Back to sessions',exact:true}).click();
+ await page.evaluate(async()=>{
+  const d=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('akutoo');r.onsuccess=()=>resolve(r.result);});
+  await new Promise<void>(resolve=>{const tx=d.transaction('sessions','readwrite'),table=tx.objectStore('sessions'),r=table.getAll();r.onsuccess=()=>{const s=r.result[0];s.progress.index=21;s.progress.guidedScan.group='expressions';table.put(s);};tx.oncomplete=()=>resolve();});d.close();
+ });
+ await page.reload();await page.getByRole('button',{name:'Continue session',exact:true}).click();await page.getByRole('button',{name:'Start camera',exact:true}).click();
+ await expect(page.locator('.gaze-point.is-target')).toHaveCount(1,{timeout:20000});
+ await page.evaluate(()=>{const close=FileSystemWritableFileStream.prototype.close;let first=true;FileSystemWritableFileStream.prototype.close=async function(){await close.call(this);if(first){first=false;await new Promise<void>(resolve=>{(window as any).releaseWrite=resolve;});}};});
+ const glance=async(direction:number)=>{
+  await page.evaluate(async direction=>{
+   const pairs=[['eyeLookOutLeft','eyeLookInRight'],['eyeLookInLeft','eyeLookOutRight'],['eyeLookUpLeft','eyeLookUpRight'],['eyeLookDownLeft','eyeLookDownRight']];
+   const neutral=Object.fromEntries([...pairs.flat(),'eyeBlinkLeft','eyeBlinkRight'].map(key=>[key,0]));
+   (window as any).fixture.blendshapes={...neutral,...Object.fromEntries(pairs[direction].map(key=>[key,.8]))};
+   await new Promise(r=>setTimeout(r,360));(window as any).fixture.blendshapes=neutral;
+  },direction);
+ };
+ await glance(3);await expect.poll(()=>page.evaluate(()=>typeof(window as any).releaseWrite)).toBe('function');
+ const before=await page.evaluate(()=>(window as any).liveMeasurements);
+ await glance(2);await expect.poll(()=>page.evaluate(()=>(window as any).liveMeasurements)).toBeGreaterThan(before+3);
+ await expect(page.getByText('0 of 4 eye directions saved',{exact:true})).toBeVisible();
+ await expect(page.locator('.gaze-point[data-saved=true]')).toHaveCount(0);
+ await page.getByRole('button',{name:'Pause',exact:true}).click();await page.evaluate(()=>(window as any).releaseWrite());
+ await expect(page.getByText('1 of 4 eye directions saved',{exact:true})).toBeVisible();
+ await expect(page.locator('.gaze-point[data-direction=down]')).toHaveAttribute('data-saved','true');
+ await page.getByRole('button',{name:'Resume',exact:true}).click();
+ for(const [i,direction]of [2,1,0].entries()){await glance(direction);await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBe(i+2);}
+ expect(violations).toEqual([]);
+});
 test('all four eye directions capture automatically and reject an unmeasured final gaze',async({page})=>{
  test.setTimeout(90000);await injectAnalysis(page);await injectSensor(page,'good');
  await page.addInitScript(()=>{(window as any).vibrations=[];Object.defineProperty(navigator,'vibrate',{configurable:true,value:(pattern:any)=>{(window as any).vibrations.push(pattern);return true;}});});
@@ -822,9 +861,16 @@ test('all four eye directions capture automatically and reject an unmeasured fin
  await page.evaluate(neutral=>{(window as any).fixture.blendshapes={...neutral,eyeLookOutLeft:.8,eyeLookInRight:.8};(window as any).fixture.stillBlendshapes=neutral;},neutral);
  await expect.poll(()=>page.evaluate(()=>(window as any).stillMeasurements??0),{timeout:20000}).toBeGreaterThanOrEqual(6);
  expect((await photoInfo(page))?.count).toBe(1);
- await page.evaluate(()=>{delete(window as any).fixture.stillBlendshapes;});
- for(const [index,keys]of [['eyeLookOutLeft','eyeLookInRight'],['eyeLookInLeft','eyeLookOutRight'],['eyeLookUpLeft','eyeLookUpRight'],['eyeLookDownLeft','eyeLookDownRight']].entries()){
-  await page.evaluate(({neutral,keys})=>{(window as any).fixture.blendshapes={...neutral,[keys[0]]:.8,[keys[1]]:.8};},{neutral,keys});
+ await expect(page.getByRole('heading',{name:'Eye scan',exact:true})).toBeVisible();
+ for(const [name,width,height]of [['mobile',390,844],['short',375,667],['desktop',1280,900]]as const){
+  await page.setViewportSize({width,height});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const pause=await page.getByRole('button',{name:'Pause',exact:true}).boundingBox();expect(pause!.y+pause!.height).toBeLessThan(height);
+  await page.screenshot({path:`.impeccable/review/gaze-${name}.png`,fullPage:true});
+ }
+ const left=await page.locator('.gaze-point[data-direction=left]').boundingBox(),right=await page.locator('.gaze-point[data-direction=right]').boundingBox();expect(left!.x).toBeLessThan(right!.x);
+ for(const [index,keys]of [['eyeLookDownLeft','eyeLookDownRight'],['eyeLookInLeft','eyeLookOutRight'],['eyeLookUpLeft','eyeLookUpRight'],['eyeLookOutLeft','eyeLookInRight']].entries()){
+  await page.evaluate(({neutral,keys})=>{delete(window as any).fixture.stillBlendshapes;(window as any).fixture.blendshapes={...neutral,[keys[0]]:.8,[keys[1]]:.8};},{neutral,keys});
   await expect.poll(async()=>(await photoInfo(page))?.count,{timeout:15000}).toBe(index+2);
  }
  const evidence=await page.evaluate(async()=>{const d=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('akutoo');r.onsuccess=()=>resolve(r.result);});const photos=await new Promise<any[]>(resolve=>{const r=d.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>resolve(r.result);});d.close();return photos.filter(p=>p.shotId.startsWith('gaze-')).map(p=>({trigger:p.captureTrigger,requested:p.direction,measured:p.gaze.direction}));});

@@ -11,6 +11,18 @@ const detailInstructions: Record<string, string> = {
   'detail-beard-front': 'Align your beard or moustache from the front inside the guide.', 'detail-beard-side': 'Turn to show the side of your beard inside the guide.',
 };
 export const s = {
+  gazeTitle:'Eye scan',gazeGuide:'Look toward the highlighted dot, keeping your head facing the camera',
+  gazeScanning:'Eye scan is on',
+  gazePoint:(direction:string,saved:boolean,selected:boolean)=>`${direction}: ${saved?'saved':selected?'look here':'not saved'}`,
+  gazeProgress:(count:number)=>`${count} of 4 eye directions saved`,
+  gazeFollow:'Keep your head facing the camera. Look toward the bright dot.',
+  gazeLook:(direction:string)=>`Keep your head still. Look ${direction==='left'||direction==='right'?`to your ${direction}`:direction} toward the bright dot.`,
+  gazeFaceForward:'Face the camera with your head. Move only your eyes.',
+  gazeOpenEyes:'Open both eyes gently, then look toward the dot.',
+  gazeCollecting:'Eyes detected. Collecting a clear frame.',
+  gazeHelp:'Move only your eyes toward the dot. If needed, look just beyond that edge of the phone. Do not strain.',
+  gazeSavedHelp:'A checkmark means the photo is saved. You can look in any unfinished direction.',
+  gazeOptions:'Eye scan options',
   scanAutomatic:'Automatic capture',scanWelcome:'Face the camera. I will guide you through the scan.',scanStartHelp:'Voice guidance starts with the scan. You can mute it at any time.',scanTitle:'Face scan',scanExtraTitle:'Extra angles',scanExample:'Follow this movement',scanStart:'Start scan',
   scanCues:{front:'Slowly face the camera.',left:'Slowly sweep to your left.',right:'Slowly sweep to your right.',up:'Slowly tilt your chin up.',down:'Slowly tilt your chin down.',back:'Slowly sweep back toward the camera.',hold:'Hold here. Taking your photo.',saving:'Keep moving slowly.',recover:'Slowly face the camera so I can find you.',complete:'Your scan is saved.'},
   scanCollecting:'Collecting clear frames',scanMoving:'Scan is on · move slowly',scanSavingFrame:'Saving a clear frame',scanExtraSummary:'Extra scan saved',
